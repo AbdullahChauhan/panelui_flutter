@@ -297,9 +297,6 @@ class AnchoredArrow {
 /// PanelUI's `Scrim` fades a dim in and out over 150ms.
 const Duration _dimFade = Duration(milliseconds: 150);
 
-/// PanelUI's `Scrim` fades a frost in over 180ms; it leaves as a dim does.
-const Duration _frostFadeIn = Duration(milliseconds: 180);
-
 /// Shows [panel] in the root [Overlay], anchored to [child].
 ///
 /// [open] drives it: the panel fades and settles in when it turns true and
@@ -529,8 +526,13 @@ class _AnchoredOverlayState extends State<AnchoredOverlay>
     final spring = widget.motion.spring;
     if (spring != null && _settle.value != 1) _settle.springTo(1, spring);
     if (_hasScrim) {
-      final fade = widget.blur ? _frostFadeIn : _dimFade;
-      _scrim.animateTo(1, duration: fade, curve: panelEase);
+      if (widget.blur) {
+        // The frost fades itself in when it mounts (PanelOverlayScrim); the
+        // layer around it only has to be there, and to fade it out again.
+        _scrim.value = 1;
+      } else {
+        _scrim.animateTo(1, duration: _dimFade, curve: panelEase);
+      }
     }
   }
 
@@ -748,7 +750,7 @@ class _AnchoredOverlayState extends State<AnchoredOverlay>
         child: AnimatedBuilder(
           animation: _scrim,
           builder: (context, _) =>
-              PanelOverlayScrim(progress: _scrim.value, blur: true),
+              PanelOverlayScrim(opacity: _scrim.value, blur: true),
         ),
       );
     }
