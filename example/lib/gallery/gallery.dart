@@ -10,7 +10,7 @@ class GalleryDemo {
     required this.builder,
   });
 
-  /// URL-safe identifier, used by `?demo=<id>`.
+  /// Identifier, unique across the gallery.
   final String id;
 
   /// The component's name.
@@ -23,12 +23,13 @@ class GalleryDemo {
   final WidgetBuilder builder;
 }
 
-/// A titled section with the demo drawn in a bordered preview well, the way
-/// PanelUI's documentation presents a component.
+/// A demo drawn in a bordered preview well, the way PanelUI's documentation
+/// presents a component. [showTitle] is off when the page already names it.
 class GallerySection extends StatelessWidget {
-  const GallerySection({super.key, required this.demo});
+  const GallerySection({super.key, required this.demo, this.showTitle = true});
 
   final GalleryDemo demo;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -38,18 +39,19 @@ class GallerySection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 12,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 2,
-          children: [
-            PanelText(
-              demo.title,
-              size: PanelTextSize.lg,
-              weight: FontWeight.w600,
-            ),
-            PanelText(demo.description, size: PanelTextSize.sm, muted: true),
-          ],
-        ),
+        if (showTitle)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 2,
+            children: [
+              PanelText(
+                demo.title,
+                size: PanelTextSize.lg,
+                weight: FontWeight.w600,
+              ),
+              PanelText(demo.description, size: PanelTextSize.sm, muted: true),
+            ],
+          ),
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
@@ -122,16 +124,20 @@ class DemoStack extends StatelessWidget {
   }
 }
 
-/// The gallery app's own state, for demos that change it (the theme
-/// selector switches the whole gallery between light and dark).
+/// The gallery's own settings, for the chrome and for demos that change them
+/// (the theme selector switches the whole gallery between light and dark).
 class GalleryScope extends InheritedWidget {
   const GalleryScope({
     super.key,
+    required this.family,
+    required this.onFamilyChanged,
     required this.mode,
     required this.onModeChanged,
     required super.child,
   });
 
+  final PanelThemeFamily family;
+  final ValueChanged<PanelThemeFamily> onFamilyChanged;
   final ThemeMode mode;
   final ValueChanged<ThemeMode> onModeChanged;
 
@@ -139,5 +145,6 @@ class GalleryScope extends InheritedWidget {
       context.dependOnInheritedWidgetOfExactType<GalleryScope>()!;
 
   @override
-  bool updateShouldNotify(GalleryScope oldWidget) => mode != oldWidget.mode;
+  bool updateShouldNotify(GalleryScope oldWidget) =>
+      mode != oldWidget.mode || family != oldWidget.family;
 }
