@@ -365,23 +365,29 @@ class PanelButton extends StatelessWidget {
         } else {
           fill = state.hovered ? palette.hoverFill : palette.fill;
         }
-        Widget box = AnimatedContainer(
+        // Only the fill crossfades (hover, press). Size, border and shadow
+        // change with the props and should land at once.
+        Widget box = TweenAnimationBuilder<Color?>(
+          tween: ColorTween(end: fill),
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,
-          constraints: isIcon
-              ? BoxConstraints.tight(Size.square(metrics.minHeight))
-              : BoxConstraints(
-                  minHeight: metrics.minHeight,
-                  minWidth: metrics.minWidth,
-                ),
-          padding: metrics.padding,
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: radius,
-            border: Border.all(
-              color: attached ? const Color(0x00000000) : palette.border,
+          builder: (context, color, child) => Container(
+            constraints: isIcon
+                ? BoxConstraints.tight(Size.square(metrics.minHeight))
+                : BoxConstraints(
+                    minHeight: metrics.minHeight,
+                    minWidth: metrics.minWidth,
+                  ),
+            padding: metrics.padding,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: radius,
+              border: Border.all(
+                color: attached ? const Color(0x00000000) : palette.border,
+              ),
+              boxShadow: palette.shadow && !attached ? theme.shadows.sm : null,
             ),
-            boxShadow: palette.shadow && !attached ? theme.shadows.sm : null,
+            child: child,
           ),
           child: Center(
             widthFactor: stretch ? null : 1,

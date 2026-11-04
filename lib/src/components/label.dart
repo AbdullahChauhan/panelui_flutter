@@ -45,6 +45,7 @@ class PanelLabel extends StatelessWidget {
     return Opacity(
       opacity: isDisabled ? 0.64 : 1,
       child: Semantics(
+        container: true,
         label: isRequired ? '$text, required' : text,
         excludeSemantics: true,
         child: Row(
