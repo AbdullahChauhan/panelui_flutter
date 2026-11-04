@@ -10,6 +10,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/overlay_capture.dart';
+import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
@@ -497,6 +498,9 @@ class _ToastCloseButton extends StatelessWidget {
       onPressed: onPressed,
       hitSlop: const EdgeInsets.all(2),
       semanticLabel: label,
+      focusRingRadius: BorderRadius.circular(12),
+      // The web close button's `ring-2 ring-ring`.
+      focusRingStyle: PanelFocusRingStyle.tight,
       builder: (context, state) => Container(
         width: 24,
         height: 24,
@@ -505,13 +509,6 @@ class _ToastCloseButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: state.hovered ? c.accent : null,
           shape: BoxShape.circle,
-          border: state.focused
-              ? Border.all(
-                  color: c.ring,
-                  width: 2,
-                  strokeAlign: BorderSide.strokeAlignOutside,
-                )
-              : null,
         ),
         child: PanelIcon(
           PanelIcons.x,

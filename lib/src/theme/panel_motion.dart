@@ -133,10 +133,11 @@ abstract final class PanelDurations {
   /// A form field's border crossing to its focused colour.
   static const Duration focus = Duration(milliseconds: 150);
 
-  /// A scrim or an overlay fading in.
+  /// A scrim or an overlay fading in. A scrim also fades out over this.
   static const Duration fadeIn = Duration(milliseconds: 150);
 
-  /// A scrim or an overlay fading out.
+  /// A dialog box leaving, or a toast under reduced motion: quicker than the
+  /// scrim behind it, so the content is gone before the dim lifts.
   static const Duration fadeOut = Duration(milliseconds: 120);
 
   /// A checkbox or radio emptying.

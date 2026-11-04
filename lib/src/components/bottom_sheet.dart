@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation/overlay_capture.dart';
 import '../foundation/overlay_scrim.dart';
+import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
@@ -1040,6 +1041,9 @@ class _SheetCloseButton extends StatelessWidget {
       pressScale: 1,
       hitSlop: const EdgeInsets.all(8),
       semanticLabel: label,
+      focusRingRadius: BorderRadius.circular(16),
+      // The web close button's `ring-2 ring-ring`.
+      focusRingStyle: PanelFocusRingStyle.tight,
       builder: (context, state) => Opacity(
         opacity: state.pressed ? 0.7 : 1,
         child: TweenAnimationBuilder<double>(
@@ -1058,13 +1062,6 @@ class _SheetCloseButton extends StatelessWidget {
                 hover,
               ),
               shape: BoxShape.circle,
-              border: state.focused
-                  ? Border.all(
-                      color: c.ring,
-                      width: 2,
-                      strokeAlign: BorderSide.strokeAlignOutside,
-                    )
-                  : null,
             ),
             child: PanelIcon(
               PanelIcons.x,
