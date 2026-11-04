@@ -64,7 +64,7 @@ Flutter's `SpringDescription`, so they port exactly.
 | Reanimated | Flutter |
 | --- | --- |
 | `withSpring(x, { damping, stiffness, mass })` | `controller.springTo(x, PanelSprings.…)` on an `AnimationController.unbounded` (a bounded controller clamps the overshoot away). Every spring lives in `PanelSprings`, named for what it moves; add one there, documented, rather than a private copy. |
-| `withTiming(x, { duration })` | `controller.animateTo(x, duration: …, curve: panelEase)` |
+| `withTiming(x, { duration })` | `controller.animateTo(x, duration: …, curve: panelEase)`. `panelEase` is Reanimated's `inOut(quad)` computed exactly; `PanelCurves` also has `inOutEase` and Tailwind's `standard` curve, and `PanelDurations.hover` is the web's 150ms hover. |
 | `FadeIn.duration(150)`, `FadeOut.duration(120)` | `PanelDurations.fadeIn`, `PanelDurations.fadeOut` |
 | `useReducedMotion()` | `panelReduceMotion(context)`. Do what the source does under it: usually jump to the end, sometimes a gentler variant (a spinner pulses instead of turning). |
 
@@ -81,6 +81,15 @@ one shared value (a switch's thumb position and track fill).
 - PanelUI's `hitSlop` is `PanelPressable(hitSlop:)`, or `PanelHitSlop` around
   anything else. It reaches only as far as the parent's own bounds, as in
   React Native.
+- Focus rings come from `PanelFocusRingStyle`: `soft` (the web button's 3pt
+  ring at 40%, the default), `offset` (`ring-2 ring-offset-2`, most web
+  controls), `tight` (`ring-2`) and `inset` (a clipped segment). Pass one as
+  `PanelPressable(focusRingStyle:)`, or ring a part of a control with
+  `PanelFocusRing`. A ring shows only while the control itself has focus.
+- Nested pressables behave as React Native's do: only the innermost shows a
+  press.
+- Web hover colours written as `color-mix(in oklab, …)` are
+  `a.mixOklab(b, amount)`.
 - State a control's `expanded`, `semanticValue` and `semanticRole` on
   `PanelPressable` rather than nesting a `Semantics` that relies on merging.
 - Carry PanelUI's accessibility state over to `Semantics` flags: `checked`,
@@ -106,6 +115,9 @@ one shared value (a switch's thumb position and track fill).
   `DefaultTextStyle`; form-control labels stay `String`, as in PanelUI.
 - Colours come only from tokens. The one exception is a literal the source
   hardcodes on purpose, such as a switch thumb's white.
+- Icons: `PanelIcon(PanelIcons.x)` takes the glyph's PanelUI default size (16
+  for most) unless the caller or an enclosing `IconTheme` sets one, so leave
+  the size unset where PanelUI does.
 - Every public member has a `///` comment (the `public_member_api_docs` lint is
   on). Say what it is for; keep the *why* where it changes what a reader does.
 
@@ -144,5 +156,8 @@ Three things that are easy to trip over:
 
 ## Gallery
 
-Add a `GalleryDemo` with realistic content to the demo file for the batch in
-`example/lib/demos/`, and register the list in `registry.dart`.
+Add a `GalleryDemo` with realistic content (PanelUI's own demo content where
+it has some) to the demo file for the component's group in
+`example/lib/demos/`, then place it on a page under its PanelUI category in
+`registry.dart`. `example/test/gallery_test.dart` fails until every demo is on
+a page, and builds every page in light and dark.

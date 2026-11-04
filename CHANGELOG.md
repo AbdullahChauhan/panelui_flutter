@@ -12,9 +12,11 @@ The first release of the port.
   `toMaterialTheme()`, `PanelTheme`, `AnimatedPanelTheme`, a type scale,
   shadows and PanelUI's springs.
 - `PanelPressable`, the shared press feedback (0.97 scale, spring release),
-  with keyboard focus rings, hover and Enter/Space activation.
+  with keyboard focus rings, hover, Enter/Space activation, PanelUI's hit
+  slop and nested-press handling. `PanelFocusRing`, `PanelHitSlop`,
+  `PanelCurves` (Reanimated's easings, exact) and `Color.mixOklab`.
 - `PanelIcon` and `PanelIcons`, PanelUI's icon set on the same HugeIcons
-  glyphs.
+  glyphs, painted directly at each glyph's PanelUI default size.
 - 43 of PanelUI's 141 components (see [docs/COMPONENTS.md](docs/COMPONENTS.md)):
   - Actions: Button, ButtonGroup, Chip, Menu, ToggleButton.
   - Forms: Checkbox, Field, Input, Label, NumberInput, OtpInput, RadioGroup,
@@ -25,4 +27,8 @@ The first release of the port.
   - Layout: Accordion, Card, Collapsible, Item, ScrollFade, Separator,
     Surface, Typography.
   - Media: Avatar and AvatarGroup.
-- A gallery app in `example/`.
+- A gallery app in `example/`, grouped by PanelUI's categories and published
+  to GitHub Pages from `main`.
+
+Every component was checked against PanelUI's source, value for value: sizes,
+colours, radii, type, motion, interaction and accessibility.
