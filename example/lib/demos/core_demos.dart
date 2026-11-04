@@ -96,6 +96,14 @@ final List<GalleryDemo> coreDemos = [
     builder: (_) => const _SurfaceDemo(),
   ),
   GalleryDemo(
+    id: 'meter',
+    title: 'Meter and Scroll Fade',
+    description:
+        'Readings on a fixed scale whose colour is a judgement, as a bar or '
+        'in blocks; and edges that fade where there is more to scroll.',
+    builder: (_) => const _MeterDemo(),
+  ),
+  GalleryDemo(
     id: 'loading',
     title: 'Spinner and Skeleton',
     description:
@@ -1009,6 +1017,105 @@ class _CodeAndNumberDemoState extends State<_CodeAndNumberDemo> {
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MeterDemo extends StatefulWidget {
+  const _MeterDemo();
+
+  @override
+  State<_MeterDemo> createState() => _MeterDemoState();
+}
+
+class _MeterDemoState extends State<_MeterDemo> {
+  double _storage = 212;
+
+  static const _storageThresholds = [
+    PanelMeterThreshold(from: 192, color: PanelMeterColor.warning),
+    PanelMeterThreshold(from: 240, color: PanelMeterColor.destructive),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return DemoStack(
+      children: [
+        SizedBox(
+          width: 420,
+          child: Column(
+            spacing: 20,
+            children: [
+              PanelMeter(
+                label: 'Storage',
+                value: _storage,
+                max: 256,
+                valueLabel: '${_storage.round()} of 256 GB',
+                thresholds: _storageThresholds,
+              ),
+              const PanelMeter(
+                label: 'Battery',
+                value: 18,
+                color: PanelMeterColor.success,
+                thresholds: [
+                  PanelMeterThreshold(
+                    from: 0,
+                    color: PanelMeterColor.destructive,
+                  ),
+                  PanelMeterThreshold(from: 20, color: PanelMeterColor.success),
+                ],
+              ),
+              const PanelMeter(
+                label: 'Password strength',
+                value: 3,
+                max: 4,
+                segments: 4,
+                valueLabel: 'Strong',
+                color: PanelMeterColor.success,
+              ),
+              Row(
+                spacing: 8,
+                children: [
+                  for (final gb in [64.0, 212.0, 248.0])
+                    PanelButton(
+                      size: PanelButtonSize.xs,
+                      variant: PanelButtonVariant.outline,
+                      onPressed: () => setState(() => _storage = gb),
+                      child: Text('${gb.round()} GB'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 40,
+          child: PanelScrollFade(
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 16,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (_, i) => Center(
+                child: PanelBadge(
+                  variant: PanelBadgeVariant.secondary,
+                  size: PanelBadgeSize.lg,
+                  child: Text(
+                    const [
+                      'Design',
+                      'Engineering',
+                      'Marketing',
+                      'Sales',
+                      'Support',
+                      'Finance',
+                      'Legal',
+                      'Research',
+                    ][i % 8],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ],
     );
