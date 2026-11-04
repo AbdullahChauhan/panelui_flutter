@@ -8,6 +8,11 @@ springs.
 > Not affiliated with the PanelUI project. PanelUI is MIT-licensed by
 > Khalid Abdi, and this port keeps that notice: see [LICENSE](LICENSE).
 
+**Try it in the browser:** the gallery is published from `main` to
+https://abdullahchauhan.github.io/panelui_flutter/. Every component has its
+own page (`#/button`, `#/tabs`, …), and the theme family and brightness can be
+switched from the sidebar.
+
 | Panel, light | Panel, dark | Moon, dark |
 | --- | --- | --- |
 | ![Panel light](screenshots/panel-light.png) | ![Panel dark](screenshots/panel-dark.png) | ![Moon dark](screenshots/moon-dark.png) |
@@ -150,28 +155,36 @@ dart run tool/generate_tokens.dart path/to/PanelUI/packages/panelui/theme.css
 | Tailwind classes resolved by Uniwind (`bg-primary`, `rounded-lg`, `text-sm`) | `theme.colors.primary`, `theme.radii.lg`, `theme.typography.style(PanelTextSize.sm)` |
 | Reanimated `withSpring({ damping, stiffness, mass })` | The same spring as a `SpringDescription` (`PanelSprings`), run with `controller.springTo()` |
 | `AnimatedPressable`: shrink to 0.97 while pressed | `PanelPressable`, which also adds focus rings, hover and Enter/Space for web and desktop |
-| HugeIcons via `@hugeicons/react-native` | The same glyphs via the `hugeicons` package: `PanelIcon(PanelIcons.chevronDown)` |
+| `hitSlop` | `PanelPressable(hitSlop:)`, or `PanelHitSlop` around any widget |
+| HugeIcons via `@hugeicons/react-native` | The same glyphs from the `hugeicons` package, painted directly as paths: `PanelIcon(PanelIcons.chevronDown)` |
 | Compound parts: `Card.Header`, `Dialog.Content` | Separate widgets (`PanelCardHeader`) or named slots (`title:`) |
 | `checked` / `onCheckedChange`, `startContent` / `endContent` | `value` / `onChanged`, `leading` / `trailing` |
 | `useReducedMotion()` | `MediaQuery.disableAnimations`, honoured by every animation |
 
 ## Gallery
 
-`example/` is a gallery of every ported component, with a theme-family switcher
-and a light/dark toggle.
+`example/` is a gallery of every ported component, grouped by PanelUI's
+categories, with a theme-family switcher and a light/dark toggle. It is what
+the published site runs.
 
 ```bash
 cd example && flutter run -d chrome
 ```
 
-On the web, `?family=moon&mode=dark&demo=button` opens it in that state.
+On the web, `?family=moon&mode=dark#/tabs` opens the Tabs page in Moon's dark
+theme.
 
 ## Development
 
 ```bash
 flutter analyze
 flutter test
+cd example && flutter test
 ```
+
+The last one is the gallery's smoke test: it builds every page in light and
+dark. CI (`.github/workflows/ci.yml`) runs all three, plus a format check, on
+every push and pull request, and publishes the gallery from `main`.
 
 - `lib/src/theme/`: tokens (generated), theme data, typography, motion.
 - `lib/src/foundation/`: `PanelPressable`, `PanelText`.

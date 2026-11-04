@@ -63,7 +63,7 @@ Flutter's `SpringDescription`, so they port exactly.
 
 | Reanimated | Flutter |
 | --- | --- |
-| `withSpring(x, { damping, stiffness, mass })` | `controller.springTo(x, SpringDescription(mass: …, stiffness: …, damping: …))` on an `AnimationController.unbounded` (a bounded controller clamps the overshoot away). Reuse `PanelSprings` where a spring matches. |
+| `withSpring(x, { damping, stiffness, mass })` | `controller.springTo(x, PanelSprings.…)` on an `AnimationController.unbounded` (a bounded controller clamps the overshoot away). Every spring lives in `PanelSprings`, named for what it moves; add one there, documented, rather than a private copy. |
 | `withTiming(x, { duration })` | `controller.animateTo(x, duration: …, curve: panelEase)` |
 | `FadeIn.duration(150)`, `FadeOut.duration(120)` | `PanelDurations.fadeIn`, `PanelDurations.fadeOut` |
 | `useReducedMotion()` | `panelReduceMotion(context)`. Do what the source does under it: usually jump to the end, sometimes a gentler variant (a spinner pulses instead of turning). |
@@ -74,9 +74,15 @@ one shared value (a switch's thumb position and track fill).
 ## Interaction and accessibility
 
 - Anything pressable goes through `PanelPressable`. It gives the 0.97 press
-  scale (set `pressScale: 1` where the source turns it off), a keyboard focus
-  ring (pass `focusRingRadius`), hover, and Enter/Space activation. Use its
-  `builder:` to style by `pressed`, `hovered` and `focused`.
+  scale (set `pressScale: 1` where the source uses a plain `Pressable`), a
+  keyboard focus ring (pass `focusRingRadius`), hover, and Enter/Space
+  activation. Use its `builder:` to style by `pressed`, `hovered` and
+  `focused`.
+- PanelUI's `hitSlop` is `PanelPressable(hitSlop:)`, or `PanelHitSlop` around
+  anything else. It reaches only as far as the parent's own bounds, as in
+  React Native.
+- State a control's `expanded`, `semanticValue` and `semanticRole` on
+  `PanelPressable` rather than nesting a `Semantics` that relies on merging.
 - Carry PanelUI's accessibility state over to `Semantics` flags: `checked`,
   `mixed`, `toggled`, `selected`, `inMutuallyExclusiveGroup`, a label, a hint,
   `liveRegion` for announcements. Hide decoration with `ExcludeSemantics`.
