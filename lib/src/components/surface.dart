@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/panel_theme.dart';
 
 /// A step on the elevation ladder.
 enum PanelSurfaceVariant {
-  /// The `surface` token, one step from the background.
+  /// The `surface` token, one step from the background: PanelUI's `default`.
   primary,
 
   /// The `surfaceSecondary` token, two steps.
@@ -25,7 +26,7 @@ enum PanelSurfacePadding {
   /// 10pt.
   sm(10),
 
-  /// 16pt, the default.
+  /// 16pt: PanelUI's `default`.
   md(16),
 
   /// 24pt.
@@ -43,6 +44,9 @@ enum PanelSurfacePadding {
 /// further from the background, so nesting surfaces builds depth without a
 /// colour being chosen anywhere. Both the fill and the corner radius follow
 /// the theme, so Moon's surfaces are tight and Grass's are soft.
+///
+/// On iOS the corners are continuous (Apple's squircle), as PanelUI asks for
+/// with `borderCurve: 'continuous'`; elsewhere they are circular arcs.
 ///
 /// ```dart
 /// PanelSurface(
@@ -65,7 +69,7 @@ class PanelSurface extends StatelessWidget {
     this.height,
   });
 
-  /// The content.
+  /// The content, clipped to the surface's corners.
   final Widget child;
 
   /// The step on the ladder.
@@ -74,10 +78,13 @@ class PanelSurface extends StatelessWidget {
   /// Inner spacing.
   final PanelSurfacePadding padding;
 
-  /// A hairline border, for a surface the same colour as what it sits on.
+  /// A hairline border. A surface the same colour as what it sits on needs
+  /// one to read as a plane of its own.
   final bool bordered;
 
-  /// A soft shadow lifting the surface off the page.
+  /// A soft shadow lifting the surface off the page. Off by default: a nested
+  /// surface reads its depth from its fill, not from a shadow it would only
+  /// cast onto its parent.
   final bool elevated;
 
   /// An optional fixed width.
@@ -96,18 +103,36 @@ class PanelSurface extends StatelessWidget {
       PanelSurfaceVariant.tertiary => c.surfaceTertiary,
       PanelSurfaceVariant.transparent => const Color(0x00000000),
     };
+    final radius = theme.radii.xxxl;
+    final side = bordered ? BorderSide(color: c.border) : BorderSide.none;
+    // The content is clipped inside the border, as PanelUI's `overflow-hidden`
+    // clips: a bled image clipped to the outer edge would paint over the
+    // border where the corners curve.
+    final inner = BorderRadius.circular(radius - side.width);
+    final content = Padding(
+      padding: EdgeInsets.all(padding.value),
+      child: child,
+    );
+    final continuous = defaultTargetPlatform == TargetPlatform.iOS;
     return Container(
       width: width,
       height: height,
-      clipBehavior: Clip.antiAlias,
-      padding: EdgeInsets.all(padding.value),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(theme.radii.xxxl),
-        border: bordered ? Border.all(color: c.border) : null,
-        boxShadow: elevated ? theme.shadows.sm : null,
+        shape: continuous
+            ? RoundedSuperellipseBorder(
+                side: side,
+                borderRadius: BorderRadius.circular(radius),
+              )
+            : RoundedRectangleBorder(
+                side: side,
+                borderRadius: BorderRadius.circular(radius),
+              ),
+        shadows: elevated ? theme.shadows.sm : null,
       ),
-      child: child,
+      child: continuous
+          ? ClipRSuperellipse(borderRadius: inner, child: content)
+          : ClipRRect(borderRadius: inner, child: content),
     );
   }
 }

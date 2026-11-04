@@ -5,12 +5,14 @@ import '../theme/panel_typography.dart';
 
 /// Text naming a form field.
 ///
-/// [isRequired], [isInvalid] and [isDisabled] change both how the label looks
-/// and what it says, so the two cannot drift apart.
-///
 /// ```dart
 /// const PanelLabel('Email', isRequired: true)
 /// ```
+///
+/// [isInvalid] and [isDisabled] change how the label looks and what screen
+/// readers are told about it together, so the two cannot drift apart. The
+/// asterisk [isRequired] adds is for the eye and is not read out: mark the
+/// field itself as required, which is what a screen reader announces.
 class PanelLabel extends StatelessWidget {
   /// Creates a label.
   const PanelLabel(
@@ -30,7 +32,8 @@ class PanelLabel extends StatelessWidget {
   /// Recolours the label to signal a validation error.
   final bool isInvalid;
 
-  /// Dims the label to 64% opacity.
+  /// Dims the label to 64% opacity, greys the asterisk and announces the
+  /// label as disabled.
   final bool isDisabled;
 
   @override
@@ -43,21 +46,22 @@ class PanelLabel extends StatelessWidget {
       color: isInvalid ? c.destructive : c.foreground,
     );
     return Opacity(
-      opacity: isDisabled ? 0.64 : 1,
+      opacity: isDisabled ? _disabledOpacity : 1,
       child: Semantics(
         container: true,
-        label: isRequired ? '$text, required' : text,
-        excludeSemantics: true,
+        enabled: !isDisabled,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          spacing: 4,
+          spacing: _asteriskGap,
           children: [
             Flexible(child: Text(text, style: style)),
             if (isRequired)
-              Text(
-                '*',
-                style: style.copyWith(
-                  color: isDisabled ? c.mutedForeground : c.destructive,
+              ExcludeSemantics(
+                child: Text(
+                  '*',
+                  style: style.copyWith(
+                    color: isDisabled ? c.mutedForeground : c.destructive,
+                  ),
                 ),
               ),
           ],
@@ -66,3 +70,9 @@ class PanelLabel extends StatelessWidget {
     );
   }
 }
+
+/// PanelUI's `opacity-[0.64]` on a disabled label.
+const double _disabledOpacity = 0.64;
+
+/// PanelUI's `gap-1` between the text and the asterisk.
+const double _asteriskGap = 4;

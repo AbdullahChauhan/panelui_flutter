@@ -2,10 +2,12 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/panel_theme.dart';
 import '../theme/panel_tokens.dart';
+import '../theme/panel_typography.dart';
 
 /// How a [PanelBadge] is coloured.
 enum PanelBadgeVariant {
-  /// Filled with the `primary` token.
+  /// Filled with the `primary` token: PanelUI's `default`, for the one thing
+  /// on a screen that should be seen first.
   primary,
 
   /// A quiet tinted fill.
@@ -47,7 +49,7 @@ enum PanelBadgeSize {
 
 /// The outline of a [PanelBadge].
 enum PanelBadgeShape {
-  /// A rounded rectangle around a label.
+  /// A rounded rectangle around a label: PanelUI's `default` shape.
   label,
 
   /// A bare status dot, with no label.
@@ -65,6 +67,16 @@ enum PanelBadgeShape {
 /// const PanelBadge.count(12)
 /// const PanelBadge.dot(variant: PanelBadgeVariant.destructive)
 /// ```
+///
+/// A badge keeps to the size of its content at the start of its parent, as
+/// PanelUI's `self-start` does, so a stretching column does not widen it into
+/// a bar. Its label and icons take the variant's text colour; an icon is drawn
+/// at 14pt unless it is given a size.
+///
+/// A dot takes the variant's own fill, so a status dot is the same faint tint
+/// a status label sits on. For a status that has to be seen at a glance, put
+/// a solid dot beside the text inside a label badge, 4pt from it (the badge's
+/// `gap-1`).
 class PanelBadge extends StatelessWidget {
   /// A badge around [child].
   const PanelBadge({
@@ -75,7 +87,8 @@ class PanelBadge extends StatelessWidget {
     this.shape = PanelBadgeShape.label,
   }) : count = null;
 
-  /// A circular count, shown as "99+" past 99.
+  /// A circular count, shown as "99+" past 99 and announced as, say, "128
+  /// unread".
   const PanelBadge.count(
     int this.count, {
     super.key,
@@ -108,131 +121,249 @@ class PanelBadge extends StatelessWidget {
   /// The outline.
   final PanelBadgeShape shape;
 
-  static const _fontSize = {
-    PanelBadgeSize.xs: 10.0,
-    PanelBadgeSize.sm: 11.0,
-    PanelBadgeSize.md: 12.0,
-    PanelBadgeSize.lg: 14.0,
-    PanelBadgeSize.xl: 16.0,
-  };
-
-  static const _padding = {
-    PanelBadgeSize.xs: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-    PanelBadgeSize.sm: EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-    PanelBadgeSize.md: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-    PanelBadgeSize.lg: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    PanelBadgeSize.xl: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-  };
-
-  static const _dot = {
-    PanelBadgeSize.xs: 4.0,
-    PanelBadgeSize.sm: 6.0,
-    PanelBadgeSize.md: 8.0,
-    PanelBadgeSize.lg: 10.0,
-    PanelBadgeSize.xl: 12.0,
-  };
-
-  // Height and horizontal padding of the count circle.
-  static const _count = {
-    PanelBadgeSize.xs: (14.0, 4.0),
-    PanelBadgeSize.sm: (16.0, 4.0),
-    PanelBadgeSize.md: (20.0, 6.0),
-    PanelBadgeSize.lg: (24.0, 8.0),
-    PanelBadgeSize.xl: (28.0, 8.0),
-  };
-
-  (Color fill, Color border, Color text) _palette(PanelColors c) {
-    const clear = Color(0x00000000);
-    switch (variant) {
-      case PanelBadgeVariant.primary:
-        return (c.primary, clear, c.primaryForeground);
-      case PanelBadgeVariant.secondary:
-        return (c.secondary, clear, c.secondaryForeground);
-      case PanelBadgeVariant.outline:
-        return (clear, c.border, c.foreground);
-      case PanelBadgeVariant.destructive:
-        return (c.destructive, clear, c.destructiveSolidForeground);
-      case PanelBadgeVariant.success:
-        return (c.successSubtle, clear, c.successForeground);
-      case PanelBadgeVariant.warning:
-        return (c.warningSubtle, clear, c.warningForeground);
-      case PanelBadgeVariant.info:
-        return (c.infoSubtle, clear, c.infoForeground);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
-    final (fill, border, text) = _palette(theme.colors);
-
-    if (shape == PanelBadgeShape.dot) {
-      // A status dot takes the solid status colour. The tinted fill a status
-      // label sits on is 8-16% opaque, which vanishes at 8px across.
-      final c = theme.colors;
-      final dotColor = switch (variant) {
-        PanelBadgeVariant.success => c.success,
-        PanelBadgeVariant.warning => c.warning,
-        PanelBadgeVariant.info => c.info,
-        PanelBadgeVariant.outline => c.mutedForeground,
-        _ => fill,
-      };
-      final d = _dot[size]!;
-      return ExcludeSemantics(
+    final palette = _BadgePalette.of(theme.colors, variant);
+    final metrics = _BadgeMetrics.of(size);
+    final labelStyle = metrics.labelStyle(theme.typography, palette.text);
+    final Widget badge = switch (shape) {
+      PanelBadgeShape.dot => ExcludeSemantics(
         child: Container(
-          width: d,
-          height: d,
-          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-        ),
-      );
-    }
-
-    final style = theme.typography.sized(
-      _fontSize[size]!,
-      weight: FontWeight.w500,
-      color: text,
-    );
-    final value = count;
-    final Widget label = value != null
-        ? Text('${value > 99 ? 99 : value}${value > 99 ? '+' : ''}')
-        : child ?? const SizedBox.shrink();
-
-    final isCount = shape == PanelBadgeShape.count;
-    final (countHeight, countPadding) = _count[size]!;
-    final badge = Container(
-      constraints: isCount
-          ? BoxConstraints(minWidth: countHeight, minHeight: countHeight)
-          : null,
-      height: isCount ? countHeight : null,
-      padding: isCount
-          ? EdgeInsets.symmetric(horizontal: countPadding)
-          : _padding[size],
-      decoration: BoxDecoration(
-        color: fill,
-        border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(
-          isCount ? countHeight / 2 : theme.radii.sm,
-        ),
-      ),
-      child: IconTheme(
-        data: IconThemeData(color: text, size: _fontSize[size]! + 2),
-        child: DefaultTextStyle(
-          style: style,
-          textAlign: TextAlign.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            spacing: 4,
-            children: [label],
+          width: metrics.dot,
+          height: metrics.dot,
+          decoration: BoxDecoration(
+            color: palette.fill,
+            shape: BoxShape.circle,
+            border: Border.all(color: palette.border),
           ),
         ),
       ),
+      PanelBadgeShape.count => _BadgeBox(
+        palette: palette,
+        labelStyle: labelStyle,
+        height: metrics.countHeight,
+        padding: EdgeInsets.symmetric(horizontal: metrics.countPadding),
+        radius: metrics.countHeight / 2,
+        child: _label,
+      ),
+      PanelBadgeShape.label => _BadgeBox(
+        palette: palette,
+        labelStyle: labelStyle,
+        padding: metrics.padding,
+        radius: theme.radii.sm,
+        child: _label,
+      ),
+    };
+
+    final aligned = Align(
+      alignment: AlignmentDirectional.topStart,
+      widthFactor: 1,
+      heightFactor: 1,
+      child: badge,
     );
-    if (value == null) return badge;
+    final value = count;
+    if (value == null) return aligned;
     return Semantics(
       label: '$value unread',
       excludeSemantics: true,
-      child: badge,
+      child: aligned,
+    );
+  }
+
+  /// The count, clamped so the badge keeps its shape, or the child.
+  Widget get _label {
+    final value = count;
+    if (value == null) return child ?? const SizedBox.shrink();
+    return Text(value > _maxCount ? '$_maxCount+' : '$value');
+  }
+}
+
+/// Counts past this render as "99+" so the badge keeps its shape.
+const int _maxCount = 99;
+
+/// The size an icon in a badge is drawn at unless it is given one: the web
+/// badge's `[&_svg]:size-3.5`.
+const double _glyphSize = 14;
+
+/// One size of a [PanelBadge], from PanelUI's `size` variants and its `dot`
+/// and `count` compound variants.
+class _BadgeMetrics {
+  const _BadgeMetrics({
+    required this.padding,
+    required this.fontSize,
+    required this.step,
+    required this.dot,
+    required this.countHeight,
+    required this.countPadding,
+  });
+
+  static _BadgeMetrics of(PanelBadgeSize size) => switch (size) {
+    PanelBadgeSize.xs => const _BadgeMetrics(
+      padding: EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      fontSize: 10,
+      step: null,
+      dot: 4,
+      countHeight: 14,
+      countPadding: 4,
+    ),
+    PanelBadgeSize.sm => const _BadgeMetrics(
+      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      fontSize: 11,
+      step: null,
+      dot: 6,
+      countHeight: 16,
+      countPadding: 4,
+    ),
+    PanelBadgeSize.md => const _BadgeMetrics(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      fontSize: 12,
+      step: PanelTextSize.xs,
+      dot: 8,
+      countHeight: 20,
+      countPadding: 6,
+    ),
+    PanelBadgeSize.lg => const _BadgeMetrics(
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      fontSize: 14,
+      step: PanelTextSize.sm,
+      dot: 10,
+      countHeight: 24,
+      countPadding: 8,
+    ),
+    PanelBadgeSize.xl => const _BadgeMetrics(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      fontSize: 16,
+      step: PanelTextSize.base,
+      dot: 12,
+      countHeight: 28,
+      countPadding: 8,
+    ),
+  };
+
+  final EdgeInsets padding;
+
+  /// The label size for the two bare sizes (`text-[10px]`, `text-[11px]`),
+  /// which keep the font's own line height.
+  final double fontSize;
+
+  /// The type-scale step for the others (`text-xs` … `text-base`), whose
+  /// paired line height sets the badge's height.
+  final PanelTextSize? step;
+
+  /// The diameter of a dot.
+  final double dot;
+
+  /// The height, and least width, of a count.
+  final double countHeight;
+
+  final double countPadding;
+
+  TextStyle labelStyle(PanelTypography typography, Color color) {
+    final step = this.step;
+    if (step == null) {
+      return typography.sized(fontSize, weight: FontWeight.w500, color: color);
+    }
+    return typography.style(step, weight: FontWeight.w500, color: color);
+  }
+}
+
+/// The colours one variant resolves to in the current theme.
+class _BadgePalette {
+  const _BadgePalette(this.fill, this.border, this.text);
+
+  factory _BadgePalette.of(PanelColors c, PanelBadgeVariant variant) =>
+      switch (variant) {
+        PanelBadgeVariant.primary => _BadgePalette(
+          c.primary,
+          _clear,
+          c.primaryForeground,
+        ),
+        PanelBadgeVariant.secondary => _BadgePalette(
+          c.secondary,
+          _clear,
+          c.secondaryForeground,
+        ),
+        PanelBadgeVariant.outline => _BadgePalette(
+          _clear,
+          c.border,
+          c.foreground,
+        ),
+        PanelBadgeVariant.destructive => _BadgePalette(
+          c.destructive,
+          _clear,
+          c.destructiveSolidForeground,
+        ),
+        PanelBadgeVariant.success => _BadgePalette(
+          c.successSubtle,
+          _clear,
+          c.successForeground,
+        ),
+        PanelBadgeVariant.warning => _BadgePalette(
+          c.warningSubtle,
+          _clear,
+          c.warningForeground,
+        ),
+        PanelBadgeVariant.info => _BadgePalette(
+          c.infoSubtle,
+          _clear,
+          c.infoForeground,
+        ),
+      };
+
+  static const Color _clear = Color(0x00000000);
+
+  final Color fill;
+
+  /// Transparent but for the outline variant: every badge keeps the 1px
+  /// border, so an outline badge is no larger than a filled one beside it.
+  final Color border;
+
+  final Color text;
+}
+
+/// A label or count badge: the bordered box, and its content centred in it.
+class _BadgeBox extends StatelessWidget {
+  const _BadgeBox({
+    required this.palette,
+    required this.labelStyle,
+    required this.padding,
+    required this.radius,
+    required this.child,
+    this.height,
+  });
+
+  final _BadgePalette palette;
+  final TextStyle labelStyle;
+  final EdgeInsets padding;
+  final double radius;
+  final Widget child;
+
+  /// A fixed height, which is also the least width: a count's circle.
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) {
+    final height = this.height;
+    return Container(
+      constraints: height == null
+          ? null
+          : BoxConstraints(minWidth: height, minHeight: height),
+      height: height,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: palette.fill,
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+      child: IconTheme(
+        data: IconThemeData(color: palette.text, size: _glyphSize),
+        child: DefaultTextStyle(
+          style: labelStyle,
+          textAlign: TextAlign.center,
+          child: Center(widthFactor: 1, heightFactor: 1, child: child),
+        ),
+      ),
     );
   }
 }

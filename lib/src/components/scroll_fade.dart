@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/panel_theme.dart';
@@ -7,13 +8,15 @@ import '../theme/panel_theme.dart';
 /// Content running past a boundary reads better fading out than cut off, and
 /// the fade doubles as a sign: an edge that fades has more content behind it.
 /// Each fade appears as the content scrolls away from its edge, fully shown
-/// 24pt in, and neither shows when the content fits.
+/// [fadeInDistance] in, and neither shows when the content fits.
 ///
 /// ```dart
 /// PanelScrollFade(
 ///   child: ListView(scrollDirection: Axis.horizontal, children: chips),
 /// )
 /// ```
+///
+/// The fades follow the scroll without rebuilding the scrollable.
 class PanelScrollFade extends StatefulWidget {
   /// Fades the edges of the scrollable [child].
   const PanelScrollFade({
@@ -23,56 +26,60 @@ class PanelScrollFade extends StatefulWidget {
     this.start = true,
     this.end = true,
     this.color,
+    this.fadeInDistance = 24,
   });
 
-  /// A scrollable: a `ListView`, a `SingleChildScrollView`, a `GridView`.
+  /// A scrollable: a `ListView`, a `SingleChildScrollView`, a `GridView`. The
+  /// fades take its axis and direction from it.
   final Widget child;
 
   /// Depth of each fade.
   final double size;
 
-  /// Fade the leading edge.
+  /// Fade the leading edge. PanelUI's `edges: 'end'` is this off.
   final bool start;
 
-  /// Fade the trailing edge.
+  /// Fade the trailing edge. PanelUI's `edges: 'start'` is this off.
   final bool end;
 
   /// The colour the fade resolves to, normally whatever is behind the
-  /// scrollable. Defaults to the `background` token.
+  /// scrollable. Defaults to the `background` token. It is drawn opaque at
+  /// the edge whatever its alpha.
   final Color? color;
+
+  /// How far the content has to scroll from an edge before that edge's fade
+  /// is fully shown.
+  final double fadeInDistance;
 
   @override
   State<PanelScrollFade> createState() => _PanelScrollFadeState();
 }
 
 class _PanelScrollFadeState extends State<PanelScrollFade> {
-  static const _fadeInDistance = 24.0;
-
-  double _leading = 0;
-  double _trailing = 0;
+  final ValueNotifier<double> _leading = ValueNotifier(0);
+  final ValueNotifier<double> _trailing = ValueNotifier(0);
   Axis _axis = Axis.vertical;
-  AxisDirection _direction = AxisDirection.down;
+  bool _reversed = false;
 
-  bool _handle(ScrollMetrics metrics) {
-    final leading =
-        ((metrics.pixels - metrics.minScrollExtent) / _fadeInDistance).clamp(
-          0.0,
-          1.0,
-        );
-    final trailing =
-        ((metrics.maxScrollExtent - metrics.pixels) / _fadeInDistance).clamp(
-          0.0,
-          1.0,
-        );
-    if (leading != _leading ||
-        trailing != _trailing ||
-        metrics.axis != _axis ||
-        metrics.axisDirection != _direction) {
+  @override
+  void dispose() {
+    _leading.dispose();
+    _trailing.dispose();
+    super.dispose();
+  }
+
+  bool _handle(ScrollMetrics metrics, int depth) {
+    if (depth != 0) return false;
+    final distance = widget.fadeInDistance;
+    _leading.value = ((metrics.pixels - metrics.minScrollExtent) / distance)
+        .clamp(0.0, 1.0);
+    _trailing.value = ((metrics.maxScrollExtent - metrics.pixels) / distance)
+        .clamp(0.0, 1.0);
+    final reversed = axisDirectionIsReversed(metrics.axisDirection);
+    if (metrics.axis != _axis || reversed != _reversed) {
       setState(() {
-        _leading = leading;
-        _trailing = trailing;
         _axis = metrics.axis;
-        _direction = metrics.axisDirection;
+        _reversed = reversed;
       });
     }
     return false;
@@ -80,63 +87,94 @@ class _PanelScrollFadeState extends State<PanelScrollFade> {
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.color ?? PanelTheme.of(context).colors.background;
-    final clear = color.withValues(alpha: 0);
-    final horizontal = _axis == Axis.horizontal;
-    // Which physical side the scroll's leading edge is on.
-    final reversed =
-        _direction == AxisDirection.up || _direction == AxisDirection.left;
-
-    Widget fade(bool atLeading, double opacity) {
-      final atStartSide = atLeading != reversed;
-      final begin = horizontal
-          ? (atStartSide ? Alignment.centerLeft : Alignment.centerRight)
-          : (atStartSide ? Alignment.topCenter : Alignment.bottomCenter);
-      final gradient = IgnorePointer(
-        child: Opacity(
+    final color = (widget.color ?? PanelTheme.of(context).colors.background)
+        .withValues(alpha: 1);
+    Widget fade(ValueNotifier<double> opacity, {required bool leading}) =>
+        _EdgeFade(
           opacity: opacity,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: begin,
-                end: -begin,
-                colors: [color, clear],
-              ),
-            ),
-          ),
-        ),
-      );
-      return horizontal
-          ? Positioned(
-              top: 0,
-              bottom: 0,
-              width: widget.size,
-              left: atStartSide ? 0 : null,
-              right: atStartSide ? null : 0,
-              child: gradient,
-            )
-          : Positioned(
-              left: 0,
-              right: 0,
-              height: widget.size,
-              top: atStartSide ? 0 : null,
-              bottom: atStartSide ? null : 0,
-              child: gradient,
-            );
-    }
+          color: color,
+          size: widget.size,
+          axis: _axis,
+          // A reversed scrollable leads from the bottom or the right.
+          atStartSide: leading != _reversed,
+        );
 
     return NotificationListener<ScrollMetricsNotification>(
-      onNotification: (n) => n.depth == 0 && _handle(n.metrics),
+      onNotification: (n) => _handle(n.metrics, n.depth),
       child: NotificationListener<ScrollNotification>(
-        onNotification: (n) => n.depth == 0 && _handle(n.metrics),
+        onNotification: (n) => _handle(n.metrics, n.depth),
         child: Stack(
           children: [
             widget.child,
-            if (widget.start) fade(true, _leading),
-            if (widget.end) fade(false, _trailing),
+            if (widget.start) fade(_leading, leading: true),
+            if (widget.end) fade(_trailing, leading: false),
           ],
         ),
       ),
     );
+  }
+}
+
+/// One edge's gradient, opaque at the edge and clear inwards, shown as far
+/// as the content has scrolled away from that edge.
+class _EdgeFade extends StatelessWidget {
+  const _EdgeFade({
+    required this.opacity,
+    required this.color,
+    required this.size,
+    required this.axis,
+    required this.atStartSide,
+  });
+
+  final ValueListenable<double> opacity;
+  final Color color;
+  final double size;
+  final Axis axis;
+
+  /// Whether the fade sits on the top or left side rather than the bottom or
+  /// right.
+  final bool atStartSide;
+
+  @override
+  Widget build(BuildContext context) {
+    final horizontal = axis == Axis.horizontal;
+    final edge = horizontal
+        ? (atStartSide ? Alignment.centerLeft : Alignment.centerRight)
+        : (atStartSide ? Alignment.topCenter : Alignment.bottomCenter);
+    final gradient = IgnorePointer(
+      child: ValueListenableBuilder<double>(
+        valueListenable: opacity,
+        // A transparent stop of the same colour: a clear black would draw a
+        // grey smear through the middle of the fade.
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: edge,
+              end: -edge,
+              colors: [color, color.withValues(alpha: 0)],
+            ),
+          ),
+        ),
+        builder: (context, value, child) =>
+            Opacity(opacity: value, child: child),
+      ),
+    );
+    return horizontal
+        ? Positioned(
+            top: 0,
+            bottom: 0,
+            width: size,
+            left: atStartSide ? 0 : null,
+            right: atStartSide ? null : 0,
+            child: gradient,
+          )
+        : Positioned(
+            left: 0,
+            right: 0,
+            height: size,
+            top: atStartSide ? 0 : null,
+            bottom: atStartSide ? null : 0,
+            child: gradient,
+          );
   }
 }

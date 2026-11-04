@@ -32,7 +32,8 @@ class PanelCard extends StatelessWidget {
   /// The parts, laid out top to bottom.
   final List<Widget> children;
 
-  /// How the content is clipped to the rounded corners.
+  /// How the content is clipped to the rounded corners, inside the border
+  /// as PanelUI's `overflow-hidden` clips.
   final Clip clipBehavior;
 
   /// An optional fixed width.
@@ -41,25 +42,36 @@ class PanelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
+    final radius = theme.radii.xxl;
+    Widget parts = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+    if (clipBehavior != Clip.none) {
+      // The border's inner edge: media clipped to the outer one would paint
+      // over the border where the corners curve.
+      parts = ClipRRect(
+        borderRadius: BorderRadius.circular(radius - _borderWidth),
+        clipBehavior: clipBehavior,
+        child: parts,
+      );
+    }
     return Container(
       width: width,
-      clipBehavior: clipBehavior,
       decoration: BoxDecoration(
         color: theme.colors.card,
-        borderRadius: BorderRadius.circular(theme.radii.xxl),
+        borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: theme.colors.border),
         boxShadow: theme.shadows.sm,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
+      child: parts,
     );
   }
 }
 
-/// The top of a card: a title and a description, 24pt from every edge.
+/// The top of a card: a title and a description, 24pt from every edge, with
+/// an optional action held in its top trailing corner.
 class PanelCardHeader extends StatelessWidget {
   /// Creates a header.
   const PanelCardHeader({
@@ -76,7 +88,9 @@ class PanelCardHeader extends StatelessWidget {
   /// The description, styled as [PanelCardDescription].
   final Widget? description;
 
-  /// An action at the end of the header row, such as a menu button.
+  /// A control for the whole card, such as a menu button, held in the
+  /// header's top trailing corner while the title and description wrap
+  /// beside it (the web card's `Card.Action`).
   final Widget? trailing;
 
   /// More content under the description.
@@ -100,7 +114,7 @@ class PanelCardHeader extends StatelessWidget {
           ? column
           : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 12,
+              spacing: _actionGap,
               children: [
                 Expanded(child: column),
                 trailing!,
@@ -128,7 +142,7 @@ class PanelCardTitle extends StatelessWidget {
             weight: FontWeight.w600,
             color: theme.colors.cardForeground,
           )
-          .copyWith(height: 1.25),
+          .copyWith(height: 1.25), // leading-tight
       child: child,
     );
   }
@@ -156,6 +170,9 @@ class PanelCardDescription extends StatelessWidget {
 }
 
 /// The body of a card, padded to line up with the header above it.
+///
+/// Bare text in it reads as PanelUI's `Text` does by default: body size, in
+/// the card's foreground colour.
 class PanelCardContent extends StatelessWidget {
   /// Pads [child] as card content.
   const PanelCardContent({super.key, required this.child});
@@ -170,7 +187,7 @@ class PanelCardContent extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       child: DefaultTextStyle(
         style: theme.typography.style(
-          PanelTextSize.sm,
+          PanelTextSize.base,
           color: theme.colors.cardForeground,
         ),
         child: child,
@@ -237,3 +254,9 @@ class PanelCardFooter extends StatelessWidget {
     );
   }
 }
+
+/// The width of the card's border: `Border.all`'s default hairline.
+const double _borderWidth = 1;
+
+/// The web card's `gap-x-4` between the heading and its action.
+const double _actionGap = 16;

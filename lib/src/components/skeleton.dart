@@ -1,3 +1,4 @@
+import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/panel_motion.dart';
@@ -10,8 +11,8 @@ import '../theme/panel_theme.dart';
 /// read as hung, because it is a shape where content will be.
 ///
 /// A placeholder is a picture of absent content, so it is hidden from screen
-/// readers unless [semanticLabel] is set. Label one skeleton per region, not
-/// all of them.
+/// readers unless [semanticLabel] is set, which announces it as a busy
+/// indicator. Label one skeleton per region, not all of them.
 ///
 /// ```dart
 /// const PanelSkeleton(width: 160, height: 16)
@@ -37,7 +38,7 @@ class PanelSkeleton extends StatefulWidget {
        radius = null,
        circle = true;
 
-  /// The width. Null fills the width available.
+  /// The width. Null spans the width the parent gives.
   final double? width;
 
   /// The height.
@@ -56,12 +57,25 @@ class PanelSkeleton extends StatefulWidget {
   State<PanelSkeleton> createState() => _PanelSkeletonState();
 }
 
+/// One half of the pulse.
+const Duration _pulseDuration = Duration(milliseconds: 700);
+
+/// How far down the pulse goes.
+const double _pulseFloor = 0.45;
+
+/// Where the pulse rests when it is not running: between its two ends, so a
+/// still skeleton looks like the same placeholder rather than a solid block.
+const double _restingOpacity = 0.7;
+
 class _PanelSkeletonState extends State<PanelSkeleton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 700),
+    duration: _pulseDuration,
   );
+  late final Animation<double> _opacity = _pulse
+      .drive(CurveTween(curve: panelEase))
+      .drive(Tween(begin: 1.0, end: _pulseFloor));
   bool? _reduced;
 
   @override
@@ -73,7 +87,9 @@ class _PanelSkeletonState extends State<PanelSkeleton>
     if (reduced) {
       _pulse.stop();
     } else {
-      _pulse.repeat(reverse: true);
+      _pulse
+        ..value = 0
+        ..repeat(reverse: true);
     }
   }
 
@@ -86,8 +102,10 @@ class _PanelSkeletonState extends State<PanelSkeleton>
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
+    // With no width, a childless Container spans the width its parent gives
+    // and collapses where that is unbounded, as a view with no width does.
     final box = Container(
-      width: widget.width ?? double.infinity,
+      width: widget.width,
       height: widget.height,
       decoration: BoxDecoration(
         color: theme.colors.skeleton,
@@ -98,20 +116,19 @@ class _PanelSkeletonState extends State<PanelSkeleton>
       ),
     );
     // A pulsing placeholder repaints every frame; keep that local.
-    final Widget animated = RepaintBoundary(
-      child: (_reduced ?? false)
-          ? Opacity(opacity: 0.7, child: box)
-          : FadeTransition(
-              opacity: Tween<double>(
-                begin: 1,
-                end: 0.45,
-              ).animate(CurvedAnimation(parent: _pulse, curve: panelEase)),
-              child: box,
-            ),
+    final Widget placeholder = RepaintBoundary(
+      child: _reduced!
+          ? Opacity(opacity: _restingOpacity, child: box)
+          : FadeTransition(opacity: _opacity, child: box),
     );
     if (widget.semanticLabel == null) {
-      return ExcludeSemantics(child: animated);
+      return ExcludeSemantics(child: placeholder);
     }
-    return Semantics(label: widget.semanticLabel, child: animated);
+    return Semantics(
+      container: true,
+      role: SemanticsRole.loadingSpinner,
+      label: widget.semanticLabel,
+      child: placeholder,
+    );
   }
 }

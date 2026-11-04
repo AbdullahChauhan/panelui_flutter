@@ -3,16 +3,30 @@ import 'package:flutter/widgets.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 
-/// Text on PanelUI's type scale, in the theme's foreground colour.
+/// Tailwind's `tracking-tight`, in ems.
+const double _trackingTight = -0.025;
+
+/// Tailwind's `leading-tight`.
+const double _leadingTight = 1.25;
+
+/// Text on PanelUI's type scale, in the theme's foreground colour: PanelUI's
+/// `Text` primitive and its `Typography` presets.
 ///
 /// ```dart
 /// PanelText('Billing', size: PanelTextSize.lg, weight: FontWeight.w600)
 /// PanelText('Updated 2 minutes ago', size: PanelTextSize.sm, muted: true)
+/// PanelText('Terms', style: TextStyle(decoration: TextDecoration.underline))
 /// ```
 ///
 /// The named constructors are PanelUI's typography roles: [PanelText.h1]
-/// through [PanelText.h6] (announced as headings), [PanelText.lead],
-/// [PanelText.large] and [PanelText.small].
+/// through [PanelText.h6] (announced as headings of that level),
+/// [PanelText.lead], [PanelText.large] and [PanelText.small]. PanelUI's
+/// `body`, `body-sm` and `body-xs` are the default constructor at
+/// [PanelTextSize.base], [PanelTextSize.sm] and [PanelTextSize.xs].
+///
+/// PanelUI's marks (`underline`, `italic`, `strike`) and its `weight`
+/// override are a [style], which is how Flutter carries them; its `transform`
+/// is the string itself, upper- or lower-cased before it is passed in.
 class PanelText extends StatelessWidget {
   /// Creates a run of text.
   const PanelText(
@@ -30,7 +44,7 @@ class PanelText extends StatelessWidget {
     this.semanticsLabel,
   }) : _tracking = 0,
        _lineHeight = null,
-       _header = false;
+       _headingLevel = 0;
 
   /// A page title: 36px, bold, tracked tight.
   const PanelText.h1(
@@ -46,9 +60,9 @@ class PanelText extends StatelessWidget {
   }) : size = PanelTextSize.xxxxl,
        weight = FontWeight.w700,
        muted = false,
-       _tracking = -0.025,
+       _tracking = _trackingTight,
        _lineHeight = null,
-       _header = true;
+       _headingLevel = 1;
 
   /// A section title: 30px, semibold, tracked tight.
   const PanelText.h2(
@@ -64,9 +78,9 @@ class PanelText extends StatelessWidget {
   }) : size = PanelTextSize.xxxl,
        weight = FontWeight.w600,
        muted = false,
-       _tracking = -0.025,
+       _tracking = _trackingTight,
        _lineHeight = null,
-       _header = true;
+       _headingLevel = 2;
 
   /// 24px, semibold, tracked tight.
   const PanelText.h3(
@@ -82,9 +96,9 @@ class PanelText extends StatelessWidget {
   }) : size = PanelTextSize.xxl,
        weight = FontWeight.w600,
        muted = false,
-       _tracking = -0.025,
+       _tracking = _trackingTight,
        _lineHeight = null,
-       _header = true;
+       _headingLevel = 3;
 
   /// 20px, semibold.
   const PanelText.h4(
@@ -102,7 +116,7 @@ class PanelText extends StatelessWidget {
        muted = false,
        _tracking = 0,
        _lineHeight = null,
-       _header = true;
+       _headingLevel = 4;
 
   /// 18px, semibold.
   const PanelText.h5(
@@ -120,7 +134,7 @@ class PanelText extends StatelessWidget {
        muted = false,
        _tracking = 0,
        _lineHeight = null,
-       _header = true;
+       _headingLevel = 5;
 
   /// 16px, semibold.
   const PanelText.h6(
@@ -138,7 +152,7 @@ class PanelText extends StatelessWidget {
        muted = false,
        _tracking = 0,
        _lineHeight = null,
-       _header = true;
+       _headingLevel = 6;
 
   /// An introductory paragraph: 20px and muted.
   const PanelText.lead(
@@ -156,7 +170,7 @@ class PanelText extends StatelessWidget {
        muted = true,
        _tracking = 0,
        _lineHeight = null,
-       _header = false;
+       _headingLevel = 0;
 
   /// Body one step up, for a number or a name that carries a row.
   const PanelText.large(
@@ -174,7 +188,7 @@ class PanelText extends StatelessWidget {
        muted = false,
        _tracking = 0,
        _lineHeight = null,
-       _header = false;
+       _headingLevel = 0;
 
   /// Body one step down and tighter, for captions and meta.
   ///
@@ -194,8 +208,8 @@ class PanelText extends StatelessWidget {
   }) : size = PanelTextSize.sm,
        weight = FontWeight.w500,
        _tracking = 0,
-       _lineHeight = 1.25,
-       _header = false;
+       _lineHeight = _leadingTight,
+       _headingLevel = 0;
 
   /// The text.
   final String data;
@@ -230,14 +244,15 @@ class PanelText extends StatelessWidget {
   /// An alternative label for screen readers.
   final String? semanticsLabel;
 
-  /// Letter spacing in ems (Tailwind's `tracking-tight` is -0.025em).
+  /// Letter spacing in ems.
   final double _tracking;
 
   /// A line-height multiplier overriding the size's paired one.
   final double? _lineHeight;
 
-  /// Whether screen readers announce this as a heading.
-  final bool _header;
+  /// The heading level screen readers announce (PanelUI's `aria-level`), or
+  /// 0 for body text.
+  final int _headingLevel;
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +279,7 @@ class PanelText extends StatelessWidget {
       softWrap: softWrap,
       semanticsLabel: semanticsLabel,
     );
-    if (!_header) return text;
-    return Semantics(header: true, child: text);
+    if (_headingLevel == 0) return text;
+    return Semantics(header: true, headingLevel: _headingLevel, child: text);
   }
 }
