@@ -11,36 +11,47 @@ import '../theme/panel_typography.dart';
 /// const PanelSeparator(label: Text('or continue with'))
 /// ```
 ///
-/// A vertical separator takes its length from its parent, so put it in a row
-/// with a height (an [IntrinsicHeight], or a fixed one) or pass [length].
+/// A rule spans the room its parent gives it along its length. A vertical one
+/// in a row needs that row to have a height (an [IntrinsicHeight], a fixed
+/// height, or a stretching parent), or a [length].
 ///
 /// A [label] breaks a horizontal rule around centred content, such as the
-/// "or" between two ways to sign in. A vertical separator ignores it.
+/// "or" between two ways to sign in. A vertical separator ignores it: a
+/// stacked word is not a divider.
 class PanelSeparator extends StatelessWidget {
   /// Creates a separator.
   const PanelSeparator({
     super.key,
     this.orientation = Axis.horizontal,
-    this.thickness = 1,
+    this.thickness = thin,
     this.length,
     this.label,
     this.decorative = true,
   });
 
+  /// PanelUI's `thin` variant, the default.
+  static const double thin = 1;
+
+  /// PanelUI's `thick` variant.
+  static const double thick = 4;
+
   /// Which way the rule runs.
   final Axis orientation;
 
-  /// The rule's thickness. PanelUI's `thick` variant is 4.
+  /// The rule's thickness: [thin], [thick], or any other width.
   final double thickness;
 
-  /// A fixed length. Null fills the space the parent gives.
+  /// A fixed length. Null spans the room the parent gives.
   final double? length;
 
-  /// Content sitting in a break in a horizontal rule.
+  /// Content sitting in a break in a horizontal rule. Text in it is set small
+  /// and muted.
   final Widget? label;
 
-  /// Whether the separator is only visual. A decorative one is skipped by
-  /// screen readers. A labelled separator is always read.
+  /// Whether the separator is only visual, and so skipped by screen readers.
+  /// Set it false where the split itself carries meaning, such as between
+  /// two groups of menu items. A labelled separator is always read: its label
+  /// is content.
   final bool decorative;
 
   @override
@@ -49,11 +60,12 @@ class PanelSeparator extends StatelessWidget {
     final color = theme.colors.border;
 
     if (orientation == Axis.horizontal && label != null) {
+      // The two rules flank the label; only the label is read.
       final rule = Expanded(
         child: Container(height: thickness, color: color),
       );
       return Row(
-        spacing: 12,
+        spacing: _labelGap,
         children: [
           rule,
           DefaultTextStyle(
@@ -68,14 +80,16 @@ class PanelSeparator extends StatelessWidget {
       );
     }
 
+    // A Container with no child spans the room its parent gives along the
+    // unsized axis, and collapses where that room is unbounded rather than
+    // asking for an infinite length.
     final Widget line = orientation == Axis.horizontal
-        ? Container(
-            width: length ?? double.infinity,
-            height: thickness,
-            color: color,
-          )
+        ? Container(width: length, height: thickness, color: color)
         : Container(width: thickness, height: length, color: color);
     if (decorative) return ExcludeSemantics(child: line);
     return Semantics(container: true, child: line);
   }
 }
+
+/// PanelUI's `gap-3` between a label and the rules on either side of it.
+const double _labelGap = 12;

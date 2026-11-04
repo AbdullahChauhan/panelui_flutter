@@ -1,3 +1,4 @@
+import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
 import '../icons/panel_icon.dart';
@@ -8,7 +9,7 @@ import '../theme/panel_typography.dart';
 
 /// The status an alert reports.
 enum PanelAlertVariant {
-  /// A neutral note on the surface fill.
+  /// A neutral note on the surface fill: PanelUI's `default`.
   neutral,
 
   /// Something worth knowing.
@@ -28,7 +29,7 @@ enum PanelAlertVariant {
 ///
 /// The icon and its colour come from [variant], so a success alert cannot
 /// end up with a warning icon. Pass [icon] to replace it, or set [showIcon]
-/// to false to drop it.
+/// to false to drop it. Screen readers are told it is an alert.
 ///
 /// ```dart
 /// const PanelAlert(
@@ -58,7 +59,8 @@ class PanelAlert extends StatelessWidget {
   /// Detail under the title, muted.
   final Widget? description;
 
-  /// Replaces the status icon.
+  /// Replaces the status icon. It takes the status colour and an 18pt size
+  /// unless it is given its own.
   final Widget? icon;
 
   /// Whether to show the status icon.
@@ -67,61 +69,19 @@ class PanelAlert extends StatelessWidget {
   /// An action at the end, such as a close button.
   final Widget? trailing;
 
-  (Color fill, Color border, Color tone, PanelIconData glyph) _palette(
-    PanelColors c,
-  ) {
-    switch (variant) {
-      case PanelAlertVariant.neutral:
-        return (c.surface, c.border, c.mutedForeground, PanelIcons.info);
-      case PanelAlertVariant.info:
-        return (
-          c.infoSoft,
-          c.info.withValues(alpha: 0.32),
-          c.infoForeground,
-          PanelIcons.info,
-        );
-      case PanelAlertVariant.success:
-        return (
-          c.successSoft,
-          c.success.withValues(alpha: 0.32),
-          c.successForeground,
-          PanelIcons.checkCircle,
-        );
-      case PanelAlertVariant.warning:
-        return (
-          c.warningSoft,
-          c.warning.withValues(alpha: 0.32),
-          c.warningForeground,
-          PanelIcons.alertTriangle,
-        );
-      case PanelAlertVariant.destructive:
-        return (
-          c.destructiveSoft,
-          c.destructive.withValues(alpha: 0.32),
-          c.destructiveForeground,
-          PanelIcons.alertTriangle,
-        );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
-    final c = theme.colors;
-    final (fill, border, tone, glyph) = _palette(c);
-    final titleColor = variant == PanelAlertVariant.neutral
-        ? c.cardForeground
-        : tone;
-
+    final palette = _AlertPalette.of(theme.colors, variant);
     return Semantics(
       container: true,
-      liveRegion: true,
+      role: SemanticsRole.alert,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: fill,
-          border: Border.all(color: border),
+          color: palette.fill,
+          border: Border.all(color: palette.border),
           borderRadius: BorderRadius.circular(theme.radii.xl),
         ),
         child: Row(
@@ -130,41 +90,130 @@ class PanelAlert extends StatelessWidget {
           children: [
             if (showIcon)
               Padding(
+                // PanelUI's `pt-px`, which sets the glyph on the title's line.
                 padding: const EdgeInsets.only(top: 1),
                 child: IconTheme(
-                  data: IconThemeData(color: tone, size: 18),
-                  child: icon ?? PanelIcon(glyph),
+                  data: IconThemeData(color: palette.tone, size: _iconSize),
+                  child: icon ?? PanelIcon(palette.glyph),
                 ),
               ),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: 2,
-                children: [
-                  if (title != null)
-                    DefaultTextStyle(
-                      style: theme.typography.style(
-                        PanelTextSize.sm,
-                        weight: FontWeight.w500,
-                        color: titleColor,
-                      ),
-                      child: title!,
-                    ),
-                  if (description != null)
-                    DefaultTextStyle(
-                      style: theme.typography.style(
-                        PanelTextSize.sm,
-                        color: c.mutedForeground,
-                      ),
-                      child: description!,
-                    ),
-                ],
+              child: _AlertText(
+                title: title,
+                description: description,
+                titleColor: palette.title,
               ),
             ),
             ?trailing,
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The size `Alert.Indicator` draws its status icon at.
+const double _iconSize = 18;
+
+/// The colours and glyph one variant resolves to in the current theme.
+class _AlertPalette {
+  const _AlertPalette({
+    required this.fill,
+    required this.border,
+    required this.tone,
+    required this.title,
+    required this.glyph,
+  });
+
+  factory _AlertPalette.of(PanelColors c, PanelAlertVariant variant) =>
+      switch (variant) {
+        PanelAlertVariant.neutral => _AlertPalette(
+          fill: c.surface,
+          border: c.border,
+          tone: c.mutedForeground,
+          title: c.cardForeground,
+          glyph: PanelIcons.info,
+        ),
+        PanelAlertVariant.info => _AlertPalette.status(
+          c.infoSoft,
+          c.info,
+          c.infoForeground,
+          PanelIcons.info,
+        ),
+        PanelAlertVariant.success => _AlertPalette.status(
+          c.successSoft,
+          c.success,
+          c.successForeground,
+          PanelIcons.checkCircle,
+        ),
+        PanelAlertVariant.warning => _AlertPalette.status(
+          c.warningSoft,
+          c.warning,
+          c.warningForeground,
+          PanelIcons.alertTriangle,
+        ),
+        PanelAlertVariant.destructive => _AlertPalette.status(
+          c.destructiveSoft,
+          c.destructive,
+          c.destructiveForeground,
+          PanelIcons.alertTriangle,
+        ),
+      };
+
+  /// A status variant: the `-soft` fill, a `/32` border in the status colour,
+  /// and the icon and title in its foreground.
+  _AlertPalette.status(this.fill, Color status, Color foreground, this.glyph)
+    : border = status.withValues(alpha: 0.32),
+      tone = foreground,
+      title = foreground;
+
+  final Color fill;
+  final Color border;
+
+  /// The icon's colour.
+  final Color tone;
+
+  final Color title;
+  final PanelIconData glyph;
+}
+
+/// The title over the description, each in its slot's style.
+class _AlertText extends StatelessWidget {
+  const _AlertText({
+    required this.title,
+    required this.description,
+    required this.titleColor,
+  });
+
+  final Widget? title;
+  final Widget? description;
+  final Color titleColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 2,
+      children: [
+        if (title != null)
+          DefaultTextStyle(
+            style: theme.typography.style(
+              PanelTextSize.sm,
+              weight: FontWeight.w500,
+              color: titleColor,
+            ),
+            child: title!,
+          ),
+        if (description != null)
+          DefaultTextStyle(
+            style: theme.typography.style(
+              PanelTextSize.sm,
+              color: theme.colors.mutedForeground,
+            ),
+            child: description!,
+          ),
+      ],
     );
   }
 }
