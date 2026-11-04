@@ -133,6 +133,7 @@ class GalleryScope extends InheritedWidget {
     required this.onFamilyChanged,
     required this.mode,
     required this.onModeChanged,
+    required this.memory,
     required super.child,
   });
 
@@ -141,10 +142,21 @@ class GalleryScope extends InheritedWidget {
   final ThemeMode mode;
   final ValueChanged<ThemeMode> onModeChanged;
 
+  /// What the chrome remembers from one page to the next.
+  final GalleryMemory memory;
+
   static GalleryScope of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<GalleryScope>()!;
 
   @override
   bool updateShouldNotify(GalleryScope oldWidget) =>
       mode != oldWidget.mode || family != oldWidget.family;
+}
+
+/// What the gallery's chrome remembers across pages. Each page builds its own
+/// sidebar, so without this every click would scroll the sidebar back to the
+/// top.
+class GalleryMemory {
+  /// How far the sidebar is scrolled.
+  double sidebarOffset = 0;
 }

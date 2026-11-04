@@ -40,6 +40,7 @@ class GalleryApp extends StatefulWidget {
 class _GalleryAppState extends State<GalleryApp> {
   late PanelThemeFamily _family = widget.initialFamily;
   late ThemeMode _mode = widget.initialMode;
+  final _memory = GalleryMemory();
 
   // Inter, the face PanelUI's own documentation is set in.
   static const _typography = PanelTypography(fontFamily: 'Inter');
@@ -65,6 +66,7 @@ class _GalleryAppState extends State<GalleryApp> {
       onFamilyChanged: (family) => setState(() => _family = family),
       mode: _mode,
       onModeChanged: (mode) => setState(() => _mode = mode),
+      memory: _memory,
       child: MaterialApp(
         title: 'PanelUI for Flutter',
         debugShowCheckedModeBanner: false,
@@ -123,10 +125,27 @@ class GalleryShell extends StatelessWidget {
   }
 }
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends StatefulWidget {
   const _Sidebar({required this.current});
 
   final String? current;
+
+  @override
+  State<_Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<_Sidebar> {
+  // Starts where the previous page's sidebar was left, and keeps it updated.
+  late final GalleryMemory _memory = GalleryScope.of(context).memory;
+  late final ScrollController _scroll = ScrollController(
+    initialScrollOffset: _memory.sidebarOffset,
+  )..addListener(() => _memory.sidebarOffset = _scroll.offset);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,10 +173,11 @@ class _Sidebar extends StatelessWidget {
           child: PanelScrollFade(
             size: 24,
             child: ListView(
+              controller: _scroll,
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
               children: [
                 _NavList(
-                  current: current,
+                  current: widget.current,
                   onSelect: (id) => _open(context, id),
                 ),
               ],

@@ -40,4 +40,24 @@ void main() {
       }
     });
   }
+
+  testWidgets('the sidebar keeps its place when a page opens', (tester) async {
+    tester.view.physicalSize = const Size(1280, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const GalleryApp(initialMode: ThemeMode.light));
+    await tester.pump(const Duration(milliseconds: 500));
+    // A page near the end of the list, scrolled up into view. The sidebar
+    // comes before the page in the tree, so its entry is the first match.
+    final entry = find.text(galleryCategories.last.pages.last.title).first;
+    final unscrolled = tester.getTopLeft(entry);
+    await tester.ensureVisible(entry);
+    await tester.pump();
+    final scrolled = tester.getTopLeft(entry);
+    expect(scrolled.dy, lessThan(unscrolled.dy));
+    await tester.tap(entry);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(tester.getTopLeft(entry), scrolled);
+  });
 }
