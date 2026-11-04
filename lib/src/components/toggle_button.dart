@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_pressable.dart';
-import '../foundation/selection_hit_slop.dart';
+import '../foundation/panel_hit_slop.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 
@@ -299,7 +299,7 @@ class PanelToggleButton extends StatelessWidget {
     // A 28pt toggle standing alone is given the rest of a 44pt target. Not
     // inside a group, where the slop would reach into its neighbours.
     if (group == null && resolvedSize == PanelToggleButtonSize.xs) {
-      button = SelectionHitSlop(
+      button = PanelHitSlop(
         slop: const EdgeInsets.all(_xsHitSlop),
         child: button,
       );

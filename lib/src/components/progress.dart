@@ -44,9 +44,6 @@ const _trackHeight = {
   PanelProgressSize.lg: 12.0,
 };
 
-/// Settles the fill onto a new value.
-const _fillSpring = SpringDescription(mass: 0.6, stiffness: 180, damping: 20);
-
 /// Fraction of the track covered by the sliding bar in indeterminate mode.
 const _indeterminateWidth = 0.4;
 
@@ -204,7 +201,7 @@ class _PanelProgressState extends State<PanelProgress>
     if (_reduced ?? false) {
       _fill.value = target;
     } else {
-      _fill.springTo(target, _fillSpring);
+      _fill.springTo(target, PanelSprings.fill);
     }
   }
 

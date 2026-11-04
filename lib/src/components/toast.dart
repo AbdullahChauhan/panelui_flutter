@@ -18,26 +18,6 @@ import '../theme/panel_tokens.dart';
 import '../theme/panel_typography.dart';
 import 'button.dart';
 
-/// The snap back after a drag that did not dismiss.
-const SpringDescription _snapSpring = PanelSprings.toast;
-
-/// The deck reshuffling after an arrival or a dismissal. Slower and softer
-/// than the drag's spring: the cards behind are not what the reader is acting
-/// on, and a stack that snaps draws the eye to the wrong thing.
-final SpringDescription _stackSpring = SpringDescription.withDurationAndBounce(
-  duration: const Duration(milliseconds: 350),
-  bounce: 0.1,
-);
-
-/// The arrival. A heavy spring (Reanimated 4's default spring with its mass
-/// set to 3) settles without a visible overshoot, and it only travels
-/// [_enterOffset], so it has little to settle.
-const SpringDescription _enterSpring = SpringDescription(
-  mass: 3,
-  stiffness: 900,
-  damping: 120,
-);
-
 /// The departure: the way it came, a little quicker, on an ease-out, so the
 /// first frames of the exit already move.
 const Duration _exitDuration = Duration(milliseconds: 240);
@@ -793,7 +773,7 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
       // its arrival still has to be noticed.
       _enter.animateTo(1, duration: PanelDurations.fadeIn, curve: panelEase);
     } else {
-      _enter.springTo(1, _enterSpring);
+      _enter.springTo(1, PanelSprings.toastEnter);
     }
   }
 
@@ -820,7 +800,7 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
     }
     controller.animateWith(
       SpringSimulation(
-        _stackSpring,
+        PanelSprings.stack,
         controller.value,
         target,
         controller.velocity,
@@ -905,7 +885,7 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
     } else if (_reduceMotion) {
       _drag.value = 0;
     } else {
-      _drag.springTo(0, _snapSpring);
+      _drag.springTo(0, PanelSprings.toast);
     }
   }
 

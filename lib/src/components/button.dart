@@ -57,6 +57,7 @@ class _Metrics {
     required this.fontSize,
     required this.iconSize,
     required this.spinner,
+    this.hitSlop = 0,
   });
 
   final double minHeight;
@@ -66,6 +67,10 @@ class _Metrics {
   final double fontSize;
   final double iconSize;
   final PanelSpinnerSize spinner;
+
+  /// Extra room that takes a press, so the compact sizes still offer a
+  /// finger-sized target (PanelUI's `BUTTON_HIT_SLOP`).
+  final double hitSlop;
 }
 
 const Map<PanelButtonSize, _Metrics> _metrics = {
@@ -77,6 +82,7 @@ const Map<PanelButtonSize, _Metrics> _metrics = {
     fontSize: 12,
     iconSize: 14,
     spinner: PanelSpinnerSize.sm,
+    hitSlop: 10,
   ),
   PanelButtonSize.sm: _Metrics(
     minHeight: 36,
@@ -86,6 +92,7 @@ const Map<PanelButtonSize, _Metrics> _metrics = {
     fontSize: 14,
     iconSize: 16,
     spinner: PanelSpinnerSize.sm,
+    hitSlop: 6,
   ),
   PanelButtonSize.md: _Metrics(
     minHeight: 44,
@@ -95,6 +102,7 @@ const Map<PanelButtonSize, _Metrics> _metrics = {
     fontSize: 16,
     iconSize: 18,
     spinner: PanelSpinnerSize.sm,
+    hitSlop: 2,
   ),
   PanelButtonSize.lg: _Metrics(
     minHeight: 48,
@@ -122,6 +130,7 @@ const Map<PanelButtonSize, _Metrics> _metrics = {
     fontSize: 16,
     iconSize: 20,
     spinner: PanelSpinnerSize.sm,
+    hitSlop: 2,
   ),
 };
 
@@ -356,6 +365,9 @@ class PanelButton extends StatelessWidget {
       autofocus: autofocus,
       semanticLabel: semanticLabel,
       focusRingRadius: attached ? null : radius,
+      // Joined segments cannot borrow room from each other without two
+      // actions claiming the same pixels.
+      hitSlop: attached ? null : EdgeInsets.all(metrics.hitSlop),
       builder: (context, state) {
         final Color fill;
         if (attached && state.pressed) {

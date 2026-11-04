@@ -36,6 +36,16 @@ enum PanelSwitchSize {
   /// How far the thumb travels: the width left once the thumb, 3pt of
   /// padding and a 1pt border on either side are taken out.
   double get travel => width - thumb - 8;
+
+  /// Room around the track that also takes a press, so the target nears 48pt
+  /// on both axes without the switch standing 48pt tall in every row.
+  EdgeInsets get hitSlop => switch (this) {
+    xs => const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+    sm => const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+    md => const EdgeInsets.symmetric(vertical: 10),
+    lg => const EdgeInsets.symmetric(vertical: 8),
+    xl => const EdgeInsets.symmetric(vertical: 6),
+  };
 }
 
 /// An on/off switch.
@@ -175,6 +185,7 @@ class _PanelSwitchState extends State<PanelSwitch>
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       focusRingRadius: BorderRadius.circular(size.height / 2),
+      hitSlop: size.hitSlop,
       child: Opacity(opacity: enabled ? 1 : 0.5, child: track),
     );
   }

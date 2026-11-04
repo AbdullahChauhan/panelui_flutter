@@ -48,6 +48,81 @@ abstract final class PanelSprings {
     stiffness: 260,
     damping: 20,
   );
+
+  /// A toast arriving. Heavy (Reanimated's default spring with its mass set
+  /// to 3), so it settles without a visible overshoot over its short travel.
+  static const SpringDescription toastEnter = SpringDescription(
+    mass: 3,
+    stiffness: 900,
+    damping: 120,
+  );
+
+  /// A toast deck reshuffling after an arrival or a dismissal. Slower and
+  /// softer than a drag's spring: the cards behind are not what the reader is
+  /// acting on, and a stack that snaps draws the eye to the wrong thing.
+  static final SpringDescription stack =
+      SpringDescription.withDurationAndBounce(
+        duration: const Duration(milliseconds: 350),
+        bounce: 0.1,
+      );
+
+  /// A bottom sheet arriving, or snapping back after a drag: one spring, as
+  /// both are the same surface at the same weight.
+  ///
+  /// PanelUI gives it in Apple's designer parameters (420ms, damping ratio
+  /// 0.9). A little under critically damped, so it settles without a bounce:
+  /// a sheet that overshoots reads as light, and a sheet is not light.
+  static final SpringDescription sheet =
+      SpringDescription.withDurationAndBounce(
+        duration: const Duration(milliseconds: 420),
+        bounce: 0.1,
+      );
+
+  /// A bottom sheet leaving: critically damped, because a spring allowed to
+  /// overshoot past the bottom flashes a gap under the sheet on its way out.
+  static final SpringDescription sheetExit =
+      SpringDescription.withDurationAndBounce(
+        duration: const Duration(milliseconds: 380),
+      );
+
+  /// A swipeable tab strip settling, whether it was thrown or a trigger was
+  /// pressed.
+  static const SpringDescription strip = SpringDescription(
+    mass: 0.6,
+    stiffness: 240,
+    damping: 22,
+  );
+
+  /// A tooltip settling in from 90% scale.
+  static const SpringDescription tooltip = SpringDescription(
+    mass: 0.5,
+    stiffness: 300,
+    damping: 20,
+  );
+
+  /// A measured fill (a progress bar, a meter) settling onto a new value.
+  /// Callers clamp it to the span of the move: the number is the information,
+  /// and an overshoot past it would misreport it.
+  static const SpringDescription fill = SpringDescription(
+    mass: 0.6,
+    stiffness: 180,
+    damping: 20,
+  );
+
+  /// A slider thumb springing onto its resting step after a drag, a press on
+  /// the track or a key. The drag itself follows the finger 1:1.
+  static const SpringDescription snap = SpringDescription(
+    mass: 0.6,
+    stiffness: 220,
+    damping: 18,
+  );
+
+  /// A slider knob settling between its idle and held sizes.
+  static const SpringDescription knob = SpringDescription(
+    mass: 0.5,
+    stiffness: 200,
+    damping: 15,
+  );
 }
 
 /// The fixed durations PanelUI uses alongside its springs.

@@ -86,26 +86,29 @@ class _PanelSpinnerState extends State<PanelSpinner>
   Widget build(BuildContext context) {
     final colors = PanelTheme.of(context).colors;
     final reduced = _reduced ?? false;
-    final spinner = SizedBox.square(
-      dimension: widget.size.dimension,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          final t = _controller.value;
-          return Opacity(
-            opacity: reduced
-                ? 1 - Curves.easeInOut.transform(t) * (1 - 0.35)
-                : 1,
-            child: CustomPaint(
-              painter: _SpinnerPainter(
-                turn: reduced ? 0 : t,
-                strokeWidth: widget.size.strokeWidth,
-                color: widget.color ?? colors.primary,
-                trackColor: widget.trackColor ?? colors.muted,
+    // It repaints every frame; keep that from spreading to the screen.
+    final spinner = RepaintBoundary(
+      child: SizedBox.square(
+        dimension: widget.size.dimension,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final t = _controller.value;
+            return Opacity(
+              opacity: reduced
+                  ? 1 - Curves.easeInOut.transform(t) * (1 - 0.35)
+                  : 1,
+              child: CustomPaint(
+                painter: _SpinnerPainter(
+                  turn: reduced ? 0 : t,
+                  strokeWidth: widget.size.strokeWidth,
+                  color: widget.color ?? colors.primary,
+                  trackColor: widget.trackColor ?? colors.muted,
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
     if (widget.semanticLabel == null) return ExcludeSemantics(child: spinner);

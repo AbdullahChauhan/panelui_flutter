@@ -155,4 +155,19 @@ void main() {
       expect(find.text('Body'), findsOneWidget);
     }
   });
+
+  testWidgets('every PanelUI glyph paints', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        Wrap(
+          children: [
+            for (final icon in PanelIcons.all.values)
+              PanelIcon(icon, size: 16, filled: true),
+          ],
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PanelIcon), findsNWidgets(PanelIcons.all.length));
+  });
 }

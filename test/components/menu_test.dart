@@ -7,20 +7,6 @@ import 'package:panelui_flutter/panelui_flutter.dart';
 
 import '../helpers.dart';
 
-/// Whether the primary focus is [finder]'s widget or inside it.
-bool focusIsWithin(WidgetTester tester, Finder finder) {
-  final context = FocusManager.instance.primaryFocus?.context;
-  if (context == null) return false;
-  final target = tester.element(finder);
-  if (context == target) return true;
-  var found = false;
-  context.visitAncestorElements((element) {
-    if (element == target) found = true;
-    return !found;
-  });
-  return found;
-}
-
 Widget _trigger(BuildContext context, PanelPopoverController controller) =>
     PanelButton(
       key: const Key('trigger'),

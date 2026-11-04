@@ -25,8 +25,8 @@ void main() {
     );
     expect(opacity.opacity, 0.64);
     expect(
-      tester.getSemantics(find.byType(PanelButton)),
-      isSemantics(isButton: true, isEnabled: false),
+      tester.getSemantics(find.text('Save')),
+      isSemantics(label: 'Save', isButton: true, isEnabled: false),
     );
   });
 
@@ -167,5 +167,31 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     }
+  });
+
+  testWidgets('a compact button takes a press just outside its edge', (
+    tester,
+  ) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      wrap(
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: PanelButton(
+            size: PanelButtonSize.xs,
+            onPressed: () => taps++,
+            child: const Text('Edit'),
+          ),
+        ),
+      ),
+    );
+    final box = tester.getRect(find.byType(PanelButton));
+    // xs reaches 10pt past each edge (PanelUI's BUTTON_HIT_SLOP).
+    await tester.tapAt(box.topCenter - const Offset(0, 8));
+    await tester.pumpAndSettle();
+    expect(taps, 1);
+    await tester.tapAt(box.topCenter - const Offset(0, 14));
+    await tester.pumpAndSettle();
+    expect(taps, 1);
   });
 }

@@ -11,32 +11,30 @@ import 'package:flutter/widgets.dart';
 ///
 /// As in React Native, the slop reaches only as far as the ancestors' own
 /// bounds: a parent never asks a child about a point outside itself.
-///
-/// Internal to the selection components; not exported from the package.
-class SelectionHitSlop extends SingleChildRenderObjectWidget {
+class PanelHitSlop extends SingleChildRenderObjectWidget {
   /// Widens [child]'s target by [slop] on each side.
-  const SelectionHitSlop({super.key, required this.slop, super.child});
+  const PanelHitSlop({super.key, required this.slop, super.child});
 
   /// How far the target reaches past each edge.
   final EdgeInsets slop;
 
   @override
-  RenderSelectionHitSlop createRenderObject(BuildContext context) =>
-      RenderSelectionHitSlop(slop);
+  RenderPanelHitSlop createRenderObject(BuildContext context) =>
+      RenderPanelHitSlop(slop);
 
   @override
   void updateRenderObject(
     BuildContext context,
-    RenderSelectionHitSlop renderObject,
+    RenderPanelHitSlop renderObject,
   ) {
     renderObject.slop = slop;
   }
 }
 
-/// The render object behind [SelectionHitSlop].
-class RenderSelectionHitSlop extends RenderProxyBox {
+/// The render object behind [PanelHitSlop].
+class RenderPanelHitSlop extends RenderProxyBox {
   /// Creates a render object that widens its child's target by [slop].
-  RenderSelectionHitSlop(this.slop);
+  RenderPanelHitSlop(this.slop);
 
   /// How far the target reaches past each edge. Changing it needs neither a
   /// layout nor a paint: it is read at the next hit test.

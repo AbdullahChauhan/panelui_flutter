@@ -41,6 +41,7 @@ export 'src/components/toast.dart';
 export 'src/components/toggle_button.dart';
 export 'src/components/tooltip.dart';
 export 'src/components/typography.dart';
+export 'src/foundation/panel_hit_slop.dart';
 export 'src/foundation/panel_pressable.dart';
 export 'src/foundation/panel_text.dart';
 export 'src/icons/panel_icon.dart';

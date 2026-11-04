@@ -11,7 +11,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Glyph data for PanelUI's icon set; PanelIcon paints it directly.
   hugeicons: ^4.4.0
+  # Turns the glyphs' SVG path data into Flutter paths.
+  path_parsing: ^1.1.0
 
 dev_dependencies:
   flutter_test:

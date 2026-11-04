@@ -16,25 +16,6 @@ import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 
-/// One spring for the whole surface: the sheet arriving and the sheet
-/// snapping back after a drag are the same object at the same weight.
-///
-/// PanelUI gives it in Apple's two designer parameters (420ms, damping ratio
-/// 0.9), which map onto a physical spring the way SwiftUI's do. A little
-/// under critically damped, so it settles without a bounce: a sheet that
-/// overshoots reads as light, and a sheet is not light. Slower than a small
-/// state change, because it is a large surface travelling most of the screen.
-final SpringDescription _sheetSpring = SpringDescription.withDurationAndBounce(
-  duration: const Duration(milliseconds: 420),
-  bounce: 0.1,
-);
-
-/// Leaving: critically damped and clamped, because a spring allowed to
-/// overshoot past the bottom flashes a gap under the sheet on its way back.
-final SpringDescription _exitSpring = SpringDescription.withDurationAndBounce(
-  duration: const Duration(milliseconds: 380),
-);
-
 /// How far a release has to carry the sheet down to dismiss it.
 const double _dismissDistance = 120;
 
@@ -282,7 +263,7 @@ class PanelBottomSheetRoute<T> extends PopupRoute<T> {
     _handoverVelocity = null;
     if (forward) {
       return SpringSimulation(
-        _sheetSpring,
+        PanelSprings.sheet,
         controller.value,
         1,
         velocity,
@@ -292,7 +273,7 @@ class PanelBottomSheetRoute<T> extends PopupRoute<T> {
     }
     return _ClampedAtTarget(
       SpringSimulation(
-        _exitSpring,
+        PanelSprings.sheetExit,
         controller.value,
         0,
         velocity,
@@ -497,7 +478,7 @@ class _PanelBottomSheetFrameState extends State<_PanelBottomSheetFrame> {
     } else {
       _drag.animateWith(
         SpringSimulation(
-          _sheetSpring,
+          PanelSprings.sheet,
           offset,
           0,
           velocity,

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart' show RangeValues;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/selection_hit_slop.dart';
+import '../foundation/panel_hit_slop.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_tokens.dart';
@@ -48,13 +48,6 @@ const _sliderMetrics = {
   PanelSliderSize.md: (height: 20.0, thumb: 28.0),
   PanelSliderSize.lg: (height: 24.0, thumb: 32.0),
 };
-
-/// Springs the thumb onto its resting step after a drag, a press on the track
-/// or a key. A drag itself is followed 1:1, so the knob stays under the finger.
-const _snapSpring = SpringDescription(mass: 0.6, stiffness: 220, damping: 18);
-
-/// Settles the knob between its idle and held sizes.
-const _knobSpring = SpringDescription(mass: 0.5, stiffness: 200, damping: 15);
 
 /// How far the knob shrinks while its thumb is held.
 const _knobPressedScale = 0.86;
@@ -540,7 +533,7 @@ class _SliderCoreState extends State<_SliderCore>
     if (panelReduceMotion(context)) {
       controller.value = fraction;
     } else {
-      controller.springTo(fraction, _snapSpring);
+      controller.springTo(fraction, PanelSprings.snap);
     }
   }
 
@@ -550,7 +543,7 @@ class _SliderCoreState extends State<_SliderCore>
     if (panelReduceMotion(context)) {
       knob.value = target;
     } else {
-      knob.springTo(target, _knobSpring);
+      knob.springTo(target, PanelSprings.knob);
     }
   }
 
@@ -900,7 +893,7 @@ class _SliderCoreState extends State<_SliderCore>
       },
     );
 
-    final interactive = SelectionHitSlop(
+    final interactive = PanelHitSlop(
       slop: const EdgeInsets.all(_hitSlop),
       child: MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,

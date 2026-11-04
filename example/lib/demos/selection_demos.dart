@@ -5,7 +5,7 @@ import 'package:panelui_flutter/panelui_flutter.dart';
 
 import '../gallery/gallery.dart';
 
-/// Demos for the selection and display batch: radio groups, progress bars,
+/// Demos for the selection and display components: radio groups, progress bars,
 /// avatars, chips, toggle buttons and sliders.
 final List<GalleryDemo> selectionDemos = [
   GalleryDemo(

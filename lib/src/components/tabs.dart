@@ -54,14 +54,6 @@ enum PanelTabsSize {
   xl,
 }
 
-/// PanelUI's `ENTER_SPRING`: the spring a swipeable strip settles on, whether
-/// it was thrown or a trigger was pressed.
-const SpringDescription _stripSpring = SpringDescription(
-  mass: 0.6,
-  stiffness: 240,
-  damping: 22,
-);
-
 /// A swipe past this share of a panel's width changes tab on release.
 const double _swipeDistanceRatio = 0.25;
 
@@ -138,7 +130,7 @@ TickerFuture _springFrom(
 ) {
   return controller.animateWith(
     SpringSimulation(
-      _stripSpring,
+      PanelSprings.strip,
       controller.value,
       target,
       velocity,
@@ -1275,7 +1267,7 @@ class _TabsPagerState extends State<_TabsPager>
     if (_still || _width == 0) {
       _position.value = _active.toDouble();
     } else {
-      _position.springTo(_active.toDouble(), _stripSpring);
+      _position.springTo(_active.toDouble(), PanelSprings.strip);
     }
   }
 
@@ -1373,7 +1365,7 @@ class _TabsPagerState extends State<_TabsPager>
     if (_still) {
       _position.value = _start;
     } else {
-      _position.springTo(_start, _stripSpring);
+      _position.springTo(_start, PanelSprings.strip);
     }
   }
 

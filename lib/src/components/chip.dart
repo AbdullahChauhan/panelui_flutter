@@ -2,7 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_pressable.dart';
-import '../foundation/selection_hit_slop.dart';
+import '../foundation/panel_hit_slop.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
 import '../theme/panel_theme.dart';
@@ -270,7 +270,7 @@ class PanelChip extends StatelessWidget {
 
     Widget? close;
     if (closable) {
-      close = SelectionHitSlop(
+      close = PanelHitSlop(
         // A small pill leaves little room for the ✕; the slop gives the
         // finger the target the pixels do not.
         slop: const EdgeInsets.all(8),

@@ -45,10 +45,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         wrap(
-          const SizedBox(
-            width: 300,
-            child: PanelMeter(value: 1, segments: 4),
-          ),
+          const SizedBox(width: 300, child: PanelMeter(value: 1, segments: 4)),
         ),
       );
       await tester.pumpAndSettle();

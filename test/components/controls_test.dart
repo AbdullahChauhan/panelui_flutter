@@ -57,7 +57,7 @@ void main() {
         ),
       );
       expect(
-        tester.getSemantics(find.byType(PanelSwitch)),
+        tester.getSemantics(find.bySemanticsLabel('Wi-Fi')),
         isSemantics(label: 'Wi-Fi', isToggled: true, isEnabled: false),
       );
     });

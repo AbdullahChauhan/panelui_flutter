@@ -133,14 +133,6 @@ class PanelMeter extends StatefulWidget {
 
 class _PanelMeterState extends State<PanelMeter>
     with SingleTickerProviderStateMixin {
-  // Settles without overshooting: the number is the information, and an
-  // overshoot past it would be decoration that misreports it.
-  static const _spring = SpringDescription(
-    mass: 0.6,
-    stiffness: 180,
-    damping: 20,
-  );
-
   late final AnimationController _fill = AnimationController.unbounded(
     vsync: this,
     value: _fraction,
@@ -164,7 +156,7 @@ class _PanelMeterState extends State<PanelMeter>
     if (panelReduceMotion(context)) {
       _fill.value = target;
     } else {
-      _fill.springTo(target, _spring);
+      _fill.springTo(target, PanelSprings.fill);
     }
   }
 

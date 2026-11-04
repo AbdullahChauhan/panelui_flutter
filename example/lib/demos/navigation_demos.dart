@@ -3,7 +3,7 @@ import 'package:panelui_flutter/panelui_flutter.dart';
 
 import '../gallery/gallery.dart';
 
-/// Demos for the navigation and disclosure batch: tabs, accordion,
+/// Demos for the navigation and disclosure components: tabs, accordion,
 /// collapsible, breadcrumb, pagination, steps and item.
 final List<GalleryDemo> navigationDemos = [
   GalleryDemo(

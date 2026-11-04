@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/anchored_overlay.dart';
+import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_theme_data.dart';
 import '../theme/panel_typography.dart';
@@ -69,7 +70,7 @@ enum PanelTooltipOpenOn {
 const AnchoredMotion _tooltipMotion = AnchoredMotion(
   enter: Duration(milliseconds: 100),
   exit: Duration(milliseconds: 100),
-  spring: SpringDescription(mass: 0.5, stiffness: 300, damping: 20),
+  spring: PanelSprings.tooltip,
   shift: 6,
   scaleFrom: 0.9,
 );

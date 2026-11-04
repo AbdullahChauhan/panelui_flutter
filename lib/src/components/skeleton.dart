@@ -97,15 +97,18 @@ class _PanelSkeletonState extends State<PanelSkeleton>
             : BorderRadius.circular(widget.radius ?? theme.radii.md),
       ),
     );
-    final Widget animated = (_reduced ?? false)
-        ? Opacity(opacity: 0.7, child: box)
-        : FadeTransition(
-            opacity: Tween<double>(
-              begin: 1,
-              end: 0.45,
-            ).animate(CurvedAnimation(parent: _pulse, curve: panelEase)),
-            child: box,
-          );
+    // A pulsing placeholder repaints every frame; keep that local.
+    final Widget animated = RepaintBoundary(
+      child: (_reduced ?? false)
+          ? Opacity(opacity: 0.7, child: box)
+          : FadeTransition(
+              opacity: Tween<double>(
+                begin: 1,
+                end: 0.45,
+              ).animate(CurvedAnimation(parent: _pulse, curve: panelEase)),
+              child: box,
+            ),
+    );
     if (widget.semanticLabel == null) {
       return ExcludeSemantics(child: animated);
     }

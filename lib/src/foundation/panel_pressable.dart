@@ -1,7 +1,10 @@
+import 'dart:ui' show SemanticsRole;
+
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/panel_motion.dart';
+import 'panel_hit_slop.dart';
 import '../theme/panel_theme.dart';
 
 /// The interaction state a [PanelPressable] hands to its builder.
@@ -65,6 +68,10 @@ class PanelPressable extends StatefulWidget {
     this.mixed,
     this.selected,
     this.inMutuallyExclusiveGroup,
+    this.expanded,
+    this.semanticValue,
+    this.semanticRole,
+    this.hitSlop,
     this.focusRingRadius,
     this.focusRingColor,
     this.behavior = HitTestBehavior.opaque,
@@ -126,6 +133,20 @@ class PanelPressable extends StatefulWidget {
 
   /// Whether the control is one of a set where only one can be chosen.
   final bool? inMutuallyExclusiveGroup;
+
+  /// Announced expanded or collapsed state, for a disclosure trigger.
+  final bool? expanded;
+
+  /// An announced value, such as "step 2 of 3" or the chosen option.
+  final String? semanticValue;
+
+  /// The control's role, for the roles a flag cannot express (a tab).
+  final SemanticsRole? semanticRole;
+
+  /// Room around the control that also takes a press, without changing its
+  /// layout: PanelUI's `hitSlop`, for controls drawn smaller than a finger.
+  /// It reaches only as far as the parent's own bounds.
+  final EdgeInsets? hitSlop;
 
   /// The shape of the keyboard focus ring. Null draws no ring.
   final BorderRadius? focusRingRadius;
@@ -269,59 +290,72 @@ class _PanelPressableState extends State<PanelPressable>
     }
 
     final enabled = _enabled;
-    return Semantics(
-      container: true,
-      button: widget.isButton,
-      enabled: enabled,
-      toggled: widget.toggled,
-      checked: widget.checked,
-      mixed: widget.mixed,
-      selected: widget.selected,
-      inMutuallyExclusiveGroup: widget.inMutuallyExclusiveGroup,
-      label: widget.semanticLabel,
-      hint: widget.semanticHint,
-      onTap: enabled && widget.onPressed != null ? widget.onPressed : null,
-      onLongPress: enabled && widget.onLongPress != null
-          ? widget.onLongPress
-          : null,
-      child: FocusableActionDetector(
+    // Outermost, so the layers below see a press in the slop as one inside
+    // them: each of them would otherwise reject it at its own edge.
+    return _withHitSlop(
+      Semantics(
+        container: true,
+        button: widget.isButton,
         enabled: enabled,
-        focusNode: widget.focusNode,
-        autofocus: widget.autofocus,
-        mouseCursor:
-            widget.mouseCursor ??
-            (enabled ? SystemMouseCursors.click : MouseCursor.defer),
-        onShowFocusHighlight: (value) {
-          if (_focused != value) setState(() => _focused = value);
-        },
-        onShowHoverHighlight: (value) {
-          if (_hovered != value) setState(() => _hovered = value);
-        },
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              _activateFromKeyboard();
-              return null;
-            },
+        toggled: widget.toggled,
+        checked: widget.checked,
+        mixed: widget.mixed,
+        selected: widget.selected,
+        inMutuallyExclusiveGroup: widget.inMutuallyExclusiveGroup,
+        expanded: widget.expanded,
+        value: widget.semanticValue,
+        role: widget.semanticRole,
+        label: widget.semanticLabel,
+        hint: widget.semanticHint,
+        onTap: enabled && widget.onPressed != null ? widget.onPressed : null,
+        onLongPress: enabled && widget.onLongPress != null
+            ? widget.onLongPress
+            : null,
+        child: FocusableActionDetector(
+          enabled: enabled,
+          focusNode: widget.focusNode,
+          autofocus: widget.autofocus,
+          mouseCursor:
+              widget.mouseCursor ??
+              (enabled ? SystemMouseCursors.click : MouseCursor.defer),
+          onShowFocusHighlight: (value) {
+            if (_focused != value) setState(() => _focused = value);
+          },
+          onShowHoverHighlight: (value) {
+            if (_hovered != value) setState(() => _hovered = value);
+          },
+          actions: <Type, Action<Intent>>{
+            ActivateIntent: CallbackAction<ActivateIntent>(
+              onInvoke: (_) {
+                _activateFromKeyboard();
+                return null;
+              },
+            ),
+            ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
+              onInvoke: (_) {
+                _activateFromKeyboard();
+                return null;
+              },
+            ),
+          },
+          child: GestureDetector(
+            behavior: widget.behavior,
+            excludeFromSemantics: true,
+            onTapDown: enabled ? _handleDown : null,
+            onTapUp: enabled ? (_) => _handleUp() : null,
+            onTapCancel: enabled ? _handleUp : null,
+            onTap: enabled ? widget.onPressed : null,
+            onLongPress: enabled ? widget.onLongPress : null,
+            child: content,
           ),
-          ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
-            onInvoke: (_) {
-              _activateFromKeyboard();
-              return null;
-            },
-          ),
-        },
-        child: GestureDetector(
-          behavior: widget.behavior,
-          excludeFromSemantics: true,
-          onTapDown: enabled ? _handleDown : null,
-          onTapUp: enabled ? (_) => _handleUp() : null,
-          onTapCancel: enabled ? _handleUp : null,
-          onTap: enabled ? widget.onPressed : null,
-          onLongPress: enabled ? widget.onLongPress : null,
-          child: content,
         ),
       ),
     );
+  }
+
+  Widget _withHitSlop(Widget child) {
+    final slop = widget.hitSlop;
+    if (slop == null || slop == EdgeInsets.zero) return child;
+    return PanelHitSlop(slop: slop, child: child);
   }
 }
