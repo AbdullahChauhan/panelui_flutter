@@ -143,8 +143,10 @@ class _Header extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 16,
       children: [
-        Row(
+        Wrap(
           spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             const PanelText(
               'PanelUI for Flutter',
