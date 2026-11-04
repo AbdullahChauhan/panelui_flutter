@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panelui_flutter/panelui_flutter.dart';
 
@@ -132,6 +133,31 @@ void main() {
       isSemantics(label: 'Breadcrumb', isSelected: true),
     );
     expect(find.bySemanticsLabel('More'), findsOneWidget);
+    handle.dispose();
+  });
+
+  testWidgets('the crumbs are a list inside a navigation landmark', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(wrap(_trail(onPressed: (_) {})));
+    final trail = tester.getSemantics(find.byType(PanelBreadcrumb));
+    expect(trail.getSemanticsData().role, SemanticsRole.navigation);
+    expect(trail.label, 'Breadcrumb');
+    final roles = <SemanticsRole>[];
+    trail.visitChildren((list) {
+      roles.add(list.getSemanticsData().role);
+      list.visitChildren((item) {
+        roles.add(item.getSemanticsData().role);
+        return true;
+      });
+      return true;
+    });
+    // One list, holding a list item per crumb.
+    expect(roles, [
+      SemanticsRole.list,
+      for (var i = 0; i < 4; i++) SemanticsRole.listItem,
+    ]);
     handle.dispose();
   });
 

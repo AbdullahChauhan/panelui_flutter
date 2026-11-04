@@ -50,7 +50,8 @@ class PanelBreadcrumb extends StatelessWidget {
     this.itemsAfterCollapse = 1,
     this.onEllipsisPressed,
     this.semanticLabel = 'Breadcrumb',
-  });
+  }) : assert(itemsBeforeCollapse >= 0),
+       assert(itemsAfterCollapse >= 0);
 
   /// The crumbs, usually [PanelBreadcrumbLink]s ending in a
   /// [PanelBreadcrumbPage].
@@ -79,99 +80,82 @@ class PanelBreadcrumb extends StatelessWidget {
   /// The trail's accessible name.
   final String semanticLabel;
 
+  /// The crumbs to draw: all of them, or the two ends of a long trail with
+  /// an ellipsis between. The middle folds only when hiding it shortens the
+  /// row: keeping all but one crumb and adding an ellipsis saves nothing.
+  List<Widget> get _sequence {
+    final max = maxItems;
+    final count = children.length;
+    if (max == null ||
+        count <= max ||
+        itemsBeforeCollapse + itemsAfterCollapse >= count) {
+      return children;
+    }
+    return [
+      ...children.take(itemsBeforeCollapse),
+      _BreadcrumbEllipsis(onPressed: onEllipsisPressed),
+      ...children.skip(count - itemsAfterCollapse),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
-    final crumbs = children;
-
-    // Fold the middle only when hiding something shortens the row: keeping
-    // all but one crumb and adding an ellipsis saves nothing.
-    var sequence = <Widget>[...crumbs];
-    final max = maxItems;
-    if (max != null &&
-        crumbs.length > max &&
-        itemsBeforeCollapse + itemsAfterCollapse < crumbs.length) {
-      final head = crumbs.take(
-        itemsBeforeCollapse < 0 ? 0 : itemsBeforeCollapse,
-      );
-      final tail = itemsAfterCollapse > 0
-          ? crumbs.sublist(crumbs.length - itemsAfterCollapse)
-          : const <Widget>[];
-      sequence = [
-        ...head,
-        _BreadcrumbEllipsis(onPressed: onEllipsisPressed),
-        ...tail,
-      ];
-    }
-
-    final separatorStyle = _crumbStyle(
-      theme,
-      size,
-      color: theme.colors.mutedForeground,
-    );
+    final muted = theme.colors.mutedForeground;
+    final sequence = _sequence;
+    // Hidden from screen readers: the order of the crumbs already says how
+    // they nest.
     final gap = ExcludeSemantics(
       child: IconTheme(
-        data: IconThemeData(color: theme.colors.mutedForeground, size: 14),
+        data: IconThemeData(color: muted, size: _iconSize),
         child: DefaultTextStyle(
-          style: separatorStyle,
+          style: _crumbStyle(theme, size, color: muted),
           child: separator ?? const PanelIcon(PanelIcons.chevronRight),
         ),
       ),
     );
 
+    // A labelled navigation landmark holding a list of crumbs, the shape of
+    // PanelUI's labelled trail around its `list`.
     return Semantics(
       container: true,
       explicitChildNodes: true,
       role: SemanticsRole.navigation,
       label: semanticLabel,
-      child: _BreadcrumbScope(
-        size: size,
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            for (var i = 0; i < sequence.length; i++)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 6,
-                children: [if (i > 0) gap, sequence[i]],
-              ),
-          ],
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        role: SemanticsRole.list,
+        child: _BreadcrumbScope(
+          size: size,
+          child: Wrap(
+            spacing: _gap,
+            runSpacing: _gap,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (var i = 0; i < sequence.length; i++)
+                Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  role: SemanticsRole.listItem,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: _gap,
+                    children: [if (i > 0) gap, sequence[i]],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-TextStyle _crumbStyle(
-  PanelThemeData theme,
-  PanelBreadcrumbSize size, {
-  required Color color,
-  FontWeight weight = FontWeight.w400,
-}) => theme.typography.style(
-  size == PanelBreadcrumbSize.sm ? PanelTextSize.xs : PanelTextSize.sm,
-  weight: weight,
-  color: color,
-);
-
-class _BreadcrumbScope extends InheritedWidget {
-  const _BreadcrumbScope({required this.size, required super.child});
-
-  final PanelBreadcrumbSize size;
-
-  static PanelBreadcrumbSize sizeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_BreadcrumbScope>()?.size ??
-      PanelBreadcrumbSize.md;
-
-  @override
-  bool updateShouldNotify(_BreadcrumbScope oldWidget) => size != oldWidget.size;
-}
-
 /// A crumb you can go back to: an ancestor of the current page.
 ///
 /// It is muted, so the current page, which is not a link, reads as the
-/// emphasised end of the trail, and it dims while pressed rather than
+/// emphasised end of the trail, and it dims to 60% while pressed rather than
 /// shrinking. A null [onPressed] leaves it as text that cannot be pressed.
 class PanelBreadcrumbLink extends StatelessWidget {
   /// Creates a link crumb.
@@ -199,14 +183,16 @@ class PanelBreadcrumbLink extends StatelessWidget {
     return PanelPressable(
       onPressed: onPressed,
       pressScale: 1,
-      pressOpacity: 0.6,
+      pressOpacity: _linkPressOpacity,
       isButton: false,
       semanticLabel: semanticLabel,
       focusRingRadius: BorderRadius.circular(theme.radii.sm),
+      // Announced as a link. PanelPressable has no parameter for that, so the
+      // flag merges into its node from here.
       child: Semantics(
         link: true,
         child: IconTheme(
-          data: IconThemeData(color: color, size: 14),
+          data: IconThemeData(color: color, size: _iconSize),
           child: DefaultTextStyle(
             style: _crumbStyle(theme, size, color: color),
             child: child,
@@ -220,8 +206,9 @@ class PanelBreadcrumbLink extends StatelessWidget {
 /// The last crumb: the page you are on.
 ///
 /// Not a link, since you cannot go where you already are. It is drawn in the
-/// full foreground so the trail resolves to it, and announced as the selected
-/// (current) crumb.
+/// full foreground so the trail resolves to it. PanelUI marks it with
+/// `aria-current="page"`, which Flutter's semantics has no flag for, so it is
+/// announced as the selected crumb instead.
 class PanelBreadcrumbPage extends StatelessWidget {
   /// Creates the current-page crumb.
   const PanelBreadcrumbPage({super.key, required this.child});
@@ -233,16 +220,17 @@ class PanelBreadcrumbPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     final size = _BreadcrumbScope.sizeOf(context);
+    final color = theme.colors.foreground;
     return Semantics(
       container: true,
       selected: true,
       child: IconTheme(
-        data: IconThemeData(color: theme.colors.foreground, size: 14),
+        data: IconThemeData(color: color, size: _iconSize),
         child: DefaultTextStyle(
           style: _crumbStyle(
             theme,
             size,
-            color: theme.colors.foreground,
+            color: color,
             weight: FontWeight.w500,
           ),
           child: child,
@@ -252,8 +240,44 @@ class PanelBreadcrumbPage extends StatelessWidget {
   }
 }
 
-/// Stands in for the crumbs a collapsed trail hides. Labelled, so the
-/// collapse is not silent to a screen reader.
+/// The gap between a crumb and the separators either side of it, and between
+/// the rows of a wrapped trail (`gap-1.5`).
+const double _gap = 6;
+
+/// The separator chevron's size, and the size an icon in a crumb defaults to.
+const double _iconSize = 14;
+
+/// How far a link dims while pressed.
+const double _linkPressOpacity = 0.6;
+
+TextStyle _crumbStyle(
+  PanelThemeData theme,
+  PanelBreadcrumbSize size, {
+  required Color color,
+  FontWeight weight = FontWeight.w400,
+}) => theme.typography.style(
+  size == PanelBreadcrumbSize.sm ? PanelTextSize.xs : PanelTextSize.sm,
+  weight: weight,
+  color: color,
+);
+
+class _BreadcrumbScope extends InheritedWidget {
+  const _BreadcrumbScope({required this.size, required super.child});
+
+  final PanelBreadcrumbSize size;
+
+  static PanelBreadcrumbSize sizeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_BreadcrumbScope>()?.size ??
+      PanelBreadcrumbSize.md;
+
+  @override
+  bool updateShouldNotify(_BreadcrumbScope oldWidget) => size != oldWidget.size;
+}
+
+/// Stands in for the crumbs a collapsed trail hides: an ellipsis in a box
+/// 20pt tall with 2pt either side (`h-5 px-0.5`). Labelled, so the collapse
+/// is not silent to a screen reader, and pressed down to 92% when it opens a
+/// menu.
 class _BreadcrumbEllipsis extends StatelessWidget {
   const _BreadcrumbEllipsis({required this.onPressed});
 
