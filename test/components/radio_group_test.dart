@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -134,7 +135,6 @@ void main() {
       tester.getSemantics(find.bySemanticsLabel('Pro')),
       isSemantics(
         label: 'Pro',
-        hint: 'Pro plan',
         isChecked: true,
         hasCheckedState: true,
         isInMutuallyExclusiveGroup: true,
@@ -346,6 +346,138 @@ void main() {
     final error = tester.takeException();
     expect(error, isA<FlutterError>());
     expect('$error', contains('PanelRadioGroup<String>'));
+  });
+
+  testWidgets('a plain row draws no description; a card does, as a hint', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(wrap(const _Plans(initial: 'Pro')));
+    expect(find.text('Pro plan'), findsNothing);
+
+    await tester.pumpWidget(
+      wrap(
+        const SizedBox(
+          width: 360,
+          child: _Plans(initial: 'Pro', variant: PanelRadioVariant.card),
+        ),
+      ),
+    );
+    expect(find.text('Pro plan'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Pro')),
+      isSemantics(label: 'Pro', hint: 'Pro plan', isChecked: true),
+    );
+    handle.dispose();
+  });
+
+  testWidgets(
+    'a chosen card takes the accent fill and a primary edge at once',
+    (tester) async {
+      const c = PanelColors.panelLight;
+      await tester.pumpWidget(
+        wrap(
+          const SizedBox(
+            width: 360,
+            child: _Plans(initial: 'Free', variant: PanelRadioVariant.card),
+          ),
+        ),
+      );
+      BoxDecoration card(String label) =>
+          tester
+                  .widget<Container>(
+                    find
+                        .ancestor(
+                          of: find.text(label),
+                          matching: find.byType(Container),
+                        )
+                        .first,
+                  )
+                  .decoration!
+              as BoxDecoration;
+      expect(card('Pro').color, c.card);
+      await tester.tap(find.text('Pro'));
+      await tester.pump();
+      // The accent tint itself, laid over whatever the card sits on.
+      expect(card('Pro').color, c.accent);
+      expect((card('Pro').border! as Border).top.color, c.primary);
+      expect(card('Free').color, c.card);
+    },
+  );
+
+  testWidgets('a pointer lights a row disc as the web package does', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(const _Plans(initial: 'Free')));
+    Color ring(String label) {
+      final disc = tester.widget<Container>(
+        find
+            .descendant(
+              of: find
+                  .ancestor(
+                    of: find.text(label),
+                    matching: find.byType(PanelPressable),
+                  )
+                  .first,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container &&
+                    widget.decoration is BoxDecoration &&
+                    (widget.decoration! as BoxDecoration).shape ==
+                        BoxShape.circle,
+              ),
+            )
+            .first,
+      );
+      return ((disc.decoration! as BoxDecoration).border! as Border).top.color;
+    }
+
+    expect(ring('Pro'), PanelColors.panelLight.input);
+    // Hover shows where a mouse is the pointer, as on the web and desktop.
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('Pro')));
+    await tester.pump();
+    // `color-mix(in oklab, input, foreground 25%)`.
+    final lit = ring('Pro');
+    expect(lit.a, closeTo(0.32647, 0.002));
+    expect(lit.r * 255, closeTo(23.24, 0.5));
+    expect(lit.g, closeTo(lit.r, 1e-6));
+    // The chosen option's disc does not change under the pointer.
+    await mouse.moveTo(tester.getCenter(find.text('Free')));
+    await tester.pump();
+    expect(ring('Free'), PanelColors.panelLight.input);
+  });
+
+  testWidgets('keyboard focus rings the disc 2pt off it, as the web does', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(const _Plans(initial: 'Pro')));
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    final ring = find.byWidgetPredicate(
+      (widget) =>
+          widget is DecoratedBox &&
+          widget.decoration is BoxDecoration &&
+          ((widget.decoration as BoxDecoration).border as Border?)?.top.color ==
+              PanelColors.panelLight.ring,
+    );
+    expect(ring, findsOneWidget);
+    final side =
+        ((tester.widget<DecoratedBox>(ring).decoration as BoxDecoration).border!
+                as Border)
+            .top;
+    expect(side.width, 2);
+    expect(side.strokeAlign, 3);
+    // Round the 20pt disc, not the 48pt row.
+    expect(tester.getSize(ring), const Size(20, 20));
   });
 
   testWidgets('every size and variant builds in every theme', (tester) async {

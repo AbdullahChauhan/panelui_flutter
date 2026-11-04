@@ -4,9 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_pressable.dart';
-import '../foundation/panel_hit_slop.dart';
-import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
+import '../theme/panel_typography.dart';
 
 /// How a [PanelToggleButton] looks at rest. Selected, every variant takes the
 /// same filled accent surface.
@@ -49,33 +48,6 @@ enum PanelToggleSelectionMode {
   multiple,
 }
 
-class _ToggleMetrics {
-  const _ToggleMetrics(
-    this.height,
-    this.padding,
-    this.gap,
-    this.fontSize,
-    this.iconSize,
-  );
-
-  final double height;
-  final double padding;
-  final double gap;
-  final double fontSize;
-  final double iconSize;
-}
-
-const _toggleMetrics = {
-  PanelToggleButtonSize.xs: _ToggleMetrics(28, 8, 4, 12, 14),
-  PanelToggleButtonSize.sm: _ToggleMetrics(36, 10, 6, 14, 16),
-  PanelToggleButtonSize.md: _ToggleMetrics(44, 16, 8, 16, 18),
-  PanelToggleButtonSize.lg: _ToggleMetrics(48, 24, 8, 18, 20),
-  PanelToggleButtonSize.xl: _ToggleMetrics(56, 32, 8, 18, 20),
-};
-
-/// What an xs toggle is short of a 44pt target on each side.
-const _xsHitSlop = 8.0;
-
 /// A button that stays down.
 ///
 /// A button does something and springs back; a toggle button *is* something
@@ -95,6 +67,11 @@ const _xsHitSlop = 8.0;
 /// button an [id], which is what the group reports, and leave [value] and
 /// [onChanged] unset. Text and icons inside take the colour that reads
 /// against the fill, muted at rest and full strength when selected.
+///
+/// On the web and desktop a pointer over a resting button lights it the way
+/// it lights a `PanelButton` of the same variant: a ghost takes the accent
+/// tint, a soft fill thins. PanelUI's web package has no toggle button of its
+/// own, so its button's hover stands in.
 class PanelToggleButton extends StatelessWidget {
   /// Creates a toggle button.
   const PanelToggleButton({
@@ -164,7 +141,6 @@ class PanelToggleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
-    final c = theme.colors;
     final group = _ToggleGroupScope.maybeOf(context);
     final ident = id;
     assert(
@@ -175,23 +151,15 @@ class PanelToggleButton extends StatelessWidget {
     final grouped = group != null && ident != null;
     final selected = grouped ? group.isSelected(ident) : value;
     final isEnabled =
-        enabled &&
-        (group?.enabled ?? true) &&
-        (grouped ? group.enabled : onChanged != null);
-    final resolvedVariant =
-        variant ?? group?.variant ?? PanelToggleButtonVariant.secondary;
+        enabled && (group?.enabled ?? true) && (grouped || onChanged != null);
     final resolvedSize = size ?? group?.size ?? PanelToggleButtonSize.md;
+    final ghost = (variant ?? group?.variant) == PanelToggleButtonVariant.ghost;
     final tick = haptics ?? group?.haptics ?? false;
-    final m = _toggleMetrics[resolvedSize]!;
-    final ghost = resolvedVariant == PanelToggleButtonVariant.ghost;
     final radius = BorderRadius.circular(
       resolvedSize == PanelToggleButtonSize.xs
           ? theme.radii.md
           : theme.radii.lg,
     );
-    final duration = panelReduceMotion(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 150);
 
     void press() {
       // A tick per press, not per resolved change: a single-choice group
@@ -204,148 +172,40 @@ class PanelToggleButton extends StatelessWidget {
       }
     }
 
-    Widget button = PanelPressable(
+    return PanelPressable(
       onPressed: isEnabled ? press : null,
-      // `checked` is what a screen reader reads as on or off: the selected
-      // state is the point of the control, so it is not left to the colour.
+      // Announced as checked, which a screen reader reads as on or off, and
+      // as selected, as PanelUI does: the state is the point of the control,
+      // so it is not left to the colour.
       checked: selected,
+      selected: selected,
       inMutuallyExclusiveGroup: grouped && group.single ? true : null,
       semanticLabel: semanticLabel,
       focusNode: focusNode,
       autofocus: autofocus,
+      // A 28pt toggle standing alone is given the rest of a 44pt target. Not
+      // inside a group, where the slop would reach into its neighbours and
+      // take their presses.
+      hitSlop: group == null && resolvedSize == PanelToggleButtonSize.xs
+          ? const EdgeInsets.all(_xsHitSlop)
+          : null,
       focusRingRadius: radius,
-      builder: (context, state) {
-        const clear = Color(0x00000000);
-        final hovered = state.hovered && !selected;
-        final Color fill;
-        if (selected) {
-          fill = c.accent;
-        } else if (hovered) {
-          // The web package's hover: a ghost takes the accent tint and the
-          // soft fill thins, as Button's do.
-          fill = ghost
-              ? c.accent
-              : c.secondary.withValues(alpha: c.secondary.a * 0.8);
-        } else {
-          fill = ghost ? clear : c.secondary;
-        }
-        final Color foreground;
-        if (selected) {
-          foreground = c.accentForeground;
-        } else {
-          foreground = hovered ? c.foreground : c.mutedForeground;
-        }
-        final labelStyle = theme.typography.sized(
-          m.fontSize,
-          weight: FontWeight.w500,
-          color: foreground,
-        );
-        final content = IconTheme(
-          data: IconThemeData(color: foreground, size: m.iconSize),
-          child: DefaultTextStyle(
-            style: labelStyle,
-            textAlign: TextAlign.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              spacing: m.gap,
-              children: [
-                ?leading,
-                if (child != null)
-                  Flexible(
-                    child: semanticLabel == null
-                        ? child!
-                        : ExcludeSemantics(child: child),
-                  ),
-                ?trailing,
-              ],
-            ),
-          ),
-        );
-        return Opacity(
-          opacity: isEnabled ? 1 : 0.64,
-          // Only the colours cross over; a change of size lands at once.
-          child: SizedBox(
-            height: m.height,
-            width: iconOnly ? m.height : null,
-            child: AnimatedContainer(
-              duration: duration,
-              curve: Curves.easeOut,
-              decoration: BoxDecoration(
-                color: fill,
-                border: Border.all(
-                  color: selected
-                      ? c.primary.withValues(alpha: c.primary.a * 0.24)
-                      : clear,
-                ),
-                borderRadius: radius,
-              ),
-              child: Padding(
-                padding: iconOnly
-                    ? EdgeInsets.zero
-                    : EdgeInsets.symmetric(horizontal: m.padding),
-                child: Center(
-                  widthFactor: iconOnly ? null : 1,
-                  heightFactor: 1,
-                  child: content,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+      builder: (context, state) => Opacity(
+        opacity: isEnabled ? 1 : _disabledOpacity,
+        child: _ToggleFace(
+          metrics: _toggleMetrics[resolvedSize]!,
+          radius: radius,
+          selected: selected,
+          hovered: state.hovered,
+          ghost: ghost,
+          iconOnly: iconOnly,
+          leading: leading,
+          label: child,
+          trailing: trailing,
+        ),
+      ),
     );
-
-    // A 28pt toggle standing alone is given the rest of a 44pt target. Not
-    // inside a group, where the slop would reach into its neighbours.
-    if (group == null && resolvedSize == PanelToggleButtonSize.xs) {
-      button = PanelHitSlop(
-        slop: const EdgeInsets.all(_xsHitSlop),
-        child: button,
-      );
-    }
-    return button;
   }
-}
-
-class _ToggleGroupScope extends InheritedWidget {
-  const _ToggleGroupScope({
-    required this.selection,
-    required this.valueType,
-    required this.accepts,
-    required this.isSelected,
-    required this.toggle,
-    required this.enabled,
-    required this.single,
-    required this.variant,
-    required this.size,
-    required this.haptics,
-    required super.child,
-  });
-
-  final List<Object?> selection;
-  final Type valueType;
-  final bool Function(Object id) accepts;
-  final bool Function(Object id) isSelected;
-  final void Function(Object id) toggle;
-  final bool enabled;
-  final bool single;
-  final PanelToggleButtonVariant? variant;
-  final PanelToggleButtonSize? size;
-  final bool? haptics;
-
-  static _ToggleGroupScope? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_ToggleGroupScope>();
-
-  @override
-  bool updateShouldNotify(_ToggleGroupScope oldWidget) =>
-      !listEquals(selection, oldWidget.selection) ||
-      enabled != oldWidget.enabled ||
-      single != oldWidget.single ||
-      variant != oldWidget.variant ||
-      size != oldWidget.size ||
-      haptics != oldWidget.haptics ||
-      toggle != oldWidget.toggle;
 }
 
 /// A set of [PanelToggleButton]s whose state it holds as one list of ids.
@@ -440,8 +300,178 @@ class PanelToggleButtonGroup<T extends Object> extends StatelessWidget {
         role: single ? SemanticsRole.radioGroup : null,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          spacing: 6,
+          spacing: _groupGap,
           children: children,
+        ),
+      ),
+    );
+  }
+}
+
+/// PanelUI's `gap-1.5` between the buttons of a group.
+const double _groupGap = 6;
+
+/// What an xs toggle is short of a 44pt target on each side.
+const double _xsHitSlop = 8;
+
+/// PanelUI's `opacity-[0.64]` on a disabled toggle.
+const double _disabledOpacity = 0.64;
+
+class _ToggleMetrics {
+  const _ToggleMetrics(
+    this.height,
+    this.padding,
+    this.gap,
+    this.text,
+    this.iconSize,
+  );
+
+  final double height;
+  final double padding;
+  final double gap;
+  final PanelTextSize text;
+
+  /// PanelUI leaves an icon its own size; these follow `PanelButton`'s, so an
+  /// icon reads the same in a toggle and a button of one size.
+  final double iconSize;
+}
+
+const _toggleMetrics = {
+  PanelToggleButtonSize.xs: _ToggleMetrics(28, 8, 4, PanelTextSize.xs, 14),
+  PanelToggleButtonSize.sm: _ToggleMetrics(36, 10, 6, PanelTextSize.sm, 16),
+  PanelToggleButtonSize.md: _ToggleMetrics(44, 16, 8, PanelTextSize.base, 18),
+  PanelToggleButtonSize.lg: _ToggleMetrics(48, 24, 8, PanelTextSize.lg, 20),
+  PanelToggleButtonSize.xl: _ToggleMetrics(56, 32, 8, PanelTextSize.lg, 20),
+};
+
+class _ToggleGroupScope extends InheritedWidget {
+  const _ToggleGroupScope({
+    required this.selection,
+    required this.valueType,
+    required this.accepts,
+    required this.isSelected,
+    required this.toggle,
+    required this.enabled,
+    required this.single,
+    required this.variant,
+    required this.size,
+    required this.haptics,
+    required super.child,
+  });
+
+  final List<Object?> selection;
+  final Type valueType;
+  final bool Function(Object id) accepts;
+  final bool Function(Object id) isSelected;
+  final void Function(Object id) toggle;
+  final bool enabled;
+  final bool single;
+  final PanelToggleButtonVariant? variant;
+  final PanelToggleButtonSize? size;
+  final bool? haptics;
+
+  static _ToggleGroupScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_ToggleGroupScope>();
+
+  @override
+  bool updateShouldNotify(_ToggleGroupScope oldWidget) =>
+      !listEquals(selection, oldWidget.selection) ||
+      enabled != oldWidget.enabled ||
+      single != oldWidget.single ||
+      variant != oldWidget.variant ||
+      size != oldWidget.size ||
+      haptics != oldWidget.haptics ||
+      toggle != oldWidget.toggle;
+}
+
+/// What a toggle draws: the fill, the faint primary edge it takes when
+/// selected, and its content in the colour that reads against the fill.
+///
+/// Every change lands at once, as in PanelUI, where none of it is animated.
+class _ToggleFace extends StatelessWidget {
+  const _ToggleFace({
+    required this.metrics,
+    required this.radius,
+    required this.selected,
+    required this.hovered,
+    required this.ghost,
+    required this.iconOnly,
+    required this.leading,
+    required this.label,
+    required this.trailing,
+  });
+
+  final _ToggleMetrics metrics;
+  final BorderRadius radius;
+  final bool selected;
+  final bool hovered;
+  final bool ghost;
+  final bool iconOnly;
+  final Widget? leading;
+  final Widget? label;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    const clear = Color(0x00000000);
+    final Color fill;
+    final Color foreground;
+    if (selected) {
+      fill = c.accent;
+      foreground = c.accentForeground;
+    } else if (hovered && ghost) {
+      // The web button's ghost hover: `bg-accent text-accent-foreground`.
+      fill = c.accent;
+      foreground = c.accentForeground;
+    } else if (hovered) {
+      // The web button's secondary hover: `bg-secondary/80`.
+      fill = c.secondary.withValues(alpha: c.secondary.a * 0.8);
+      foreground = c.mutedForeground;
+    } else {
+      fill = ghost ? clear : c.secondary;
+      foreground = c.mutedForeground;
+    }
+
+    return Container(
+      height: metrics.height,
+      width: iconOnly ? metrics.height : null,
+      padding: iconOnly
+          ? null
+          : EdgeInsets.symmetric(horizontal: metrics.padding),
+      decoration: BoxDecoration(
+        color: fill,
+        border: Border.all(
+          // `border-primary/24` when selected, `border-transparent` at rest.
+          color: selected
+              ? c.primary.withValues(alpha: c.primary.a * 0.24)
+              : clear,
+        ),
+        borderRadius: radius,
+      ),
+      child: Center(
+        widthFactor: iconOnly ? null : 1,
+        heightFactor: 1,
+        child: IconTheme(
+          data: IconThemeData(color: foreground, size: metrics.iconSize),
+          child: DefaultTextStyle(
+            style: theme.typography.style(
+              metrics.text,
+              weight: FontWeight.w500,
+              color: foreground,
+            ),
+            textAlign: TextAlign.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: metrics.gap,
+              children: [
+                ?leading,
+                if (label != null) Flexible(child: label!),
+                ?trailing,
+              ],
+            ),
+          ),
         ),
       ),
     );

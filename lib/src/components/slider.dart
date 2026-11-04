@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import '../foundation/panel_hit_slop.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
+import '../theme/panel_theme_data.dart';
 import '../theme/panel_tokens.dart';
 import '../theme/panel_typography.dart';
 
@@ -40,21 +41,6 @@ enum PanelSliderSize {
   /// A 24pt track with a 32pt thumb.
   lg,
 }
-
-/// Track height (which is also the thumb's) and thumb width per size. The
-/// thumb is wider than it is tall, so the pill reads as a grip.
-const _sliderMetrics = {
-  PanelSliderSize.sm: (height: 16.0, thumb: 24.0),
-  PanelSliderSize.md: (height: 20.0, thumb: 28.0),
-  PanelSliderSize.lg: (height: 24.0, thumb: 32.0),
-};
-
-/// How far the knob shrinks while its thumb is held.
-const _knobPressedScale = 0.86;
-
-/// The grab area around the track: the pill is small, the target should not
-/// be.
-const _hitSlop = 16.0;
 
 /// Picks a number by dragging a thumb along a track.
 ///
@@ -294,6 +280,34 @@ class PanelRangeSlider extends StatelessWidget {
   }
 }
 
+/// Track height (which is also the thumb's) and thumb width per size. The
+/// thumb is wider than it is tall, so the pill reads as a grip.
+const _sliderMetrics = {
+  PanelSliderSize.sm: (height: 16.0, thumb: 24.0),
+  PanelSliderSize.md: (height: 20.0, thumb: 28.0),
+  PanelSliderSize.lg: (height: 24.0, thumb: 32.0),
+};
+
+/// The thumb's `p-0.5`: how far its knob sits inside it.
+const double _knobInset = 2;
+
+/// How far the knob shrinks while its thumb is held.
+const double _knobPressedScale = 0.86;
+
+/// The knob's scale for how far it is pressed, 0 to 1. Linear, so the
+/// spring's overshoot carries through.
+final Animatable<double> _knobScale = Tween<double>(
+  begin: 1,
+  end: _knobPressedScale,
+);
+
+/// The grab area around the track: the pill is small, the target should not
+/// be. As in PanelUI it is the drag's alone; a press there moves nothing.
+const double _hitSlop = 16;
+
+/// PanelUI's `opacity-50` on a disabled slider.
+const double _disabledOpacity = 0.5;
+
 /// Which thumb a gesture or a key moves. A one-thumb slider only has [high].
 enum _Thumb { low, high }
 
@@ -367,18 +381,16 @@ class _SliderCoreState extends State<_SliderCore>
     vsync: this,
     value: _fraction(_highValue),
   );
+
+  // How far each knob is pressed in, 0 to 1.
   late final AnimationController _lowKnob = AnimationController.unbounded(
     vsync: this,
   );
   late final AnimationController _highKnob = AnimationController.unbounded(
     vsync: this,
   );
-  late final Listenable _motion = Listenable.merge([
-    _low,
-    _high,
-    _lowKnob,
-    _highKnob,
-  ]);
+  late final Animation<double> _lowKnobScale = _lowKnob.drive(_knobScale);
+  late final Animation<double> _highKnobScale = _highKnob.drive(_knobScale);
 
   FocusNode? _ownHighFocus;
   late final FocusNode _lowFocus = FocusNode(
@@ -454,6 +466,12 @@ class _SliderCoreState extends State<_SliderCore>
       ? widget.minStepsBetweenThumbs * widget.step / _span
       : 0;
 
+  ({double height, double thumb}) get _metrics => _sliderMetrics[widget.size]!;
+
+  double get _travel => math.max(_trackWidth - _metrics.thumb, 1);
+
+  bool get _rtl => Directionality.of(context) == TextDirection.rtl;
+
   double _clamp(double value) =>
       value.clamp(widget.min, math.max(widget.min, widget.max));
 
@@ -463,17 +481,15 @@ class _SliderCoreState extends State<_SliderCore>
   double _valueAt(double fraction) => widget.min + fraction * _span;
 
   /// [value] on the nearest step, inside the range, without the float noise
-  /// repeated steps leave (0.30000000000000004).
+  /// repeated steps leave (0.30000000000000004): rounded to as many places as
+  /// the step and the bound it counts from are written with.
   double _snap(double value) {
     final step = widget.step;
     final max = math.max(widget.min, widget.max);
     if (step <= 0) return value.clamp(widget.min, max);
     final stepped = ((value - widget.min) / step).round() * step + widget.min;
-    final text = step.toString();
-    final dot = text.indexOf('.');
-    final decimals = dot < 0 || text.contains('e') ? 0 : text.length - dot - 1;
-    final tidy = double.parse(stepped.toStringAsFixed(math.min(decimals, 10)));
-    return tidy.clamp(widget.min, max);
+    final places = math.max(_placesOf(step), _placesOf(widget.min));
+    return double.parse(stepped.toStringAsFixed(places)).clamp(widget.min, max);
   }
 
   String _print(double value) =>
@@ -563,31 +579,24 @@ class _SliderCoreState extends State<_SliderCore>
     if (end) widget.onChangeEnd?.call(low, high);
   }
 
-  double get _travel => math.max(_trackWidth - _metrics.thumb, 1);
-
-  ({double height, double thumb}) get _metrics => _sliderMetrics[widget.size]!;
-
-  bool get _rtl => Directionality.of(context) == TextDirection.rtl;
-
-  /// The position along the track under [x], measured from the start edge,
-  /// with the thumb's centre as the reference point.
-  double _fractionAt(double x) {
-    final along = _rtl ? _trackWidth - x : x;
-    return ((along - _metrics.thumb / 2) / _travel).clamp(0.0, 1.0);
-  }
-
   /// Which thumb a press at [x] takes. A tie goes to the thumb the press is
   /// outside of: with both stacked at one end, the nearer one may have
   /// nowhere to go, and a range that cannot be pulled off its own end is a
   /// broken control.
   _Thumb _pick(double x) {
     if (!widget.range) return _Thumb.high;
-    final along = _rtl ? _trackWidth - x : x;
-    final p = (along - _metrics.thumb / 2) / _travel;
+    final p = _alongTrack(x);
     final toLow = (p - _low.value).abs();
     final toHigh = (p - _high.value).abs();
     if (toLow == toHigh) return p < _low.value ? _Thumb.low : _Thumb.high;
     return toLow < toHigh ? _Thumb.low : _Thumb.high;
+  }
+
+  /// The position along the track under [x], measured from the start edge,
+  /// with the thumb's centre as the reference point. Unclamped.
+  double _alongTrack(double x) {
+    final along = _rtl ? _trackWidth - x : x;
+    return (along - _metrics.thumb / 2) / _travel;
   }
 
   void _handlePointerDown(PointerDownEvent event) {
@@ -634,7 +643,8 @@ class _SliderCoreState extends State<_SliderCore>
     if (!_dragging) return;
     _dragging = false;
     final (low, high) = _reportPositions(end: true);
-    // On release the thumb springs onto the step it was reported at.
+    // On release the thumb springs onto the step it was reported at, as
+    // PanelUI's snap spring describes.
     if (widget.range) _settle(_Thumb.low, _fraction(low));
     _settle(_Thumb.high, _fraction(high));
   }
@@ -647,8 +657,12 @@ class _SliderCoreState extends State<_SliderCore>
   }
 
   void _handleTapUp(TapUpDetails details) {
-    final next = _fractionAt(details.localPosition.dx);
-    final thumb = _pick(details.localPosition.dx);
+    // The slop is for grabbing the thumb; a press there moves nothing.
+    final track = Offset.zero & Size(_trackWidth, _metrics.height);
+    if (!track.contains(details.localPosition)) return;
+    final x = details.localPosition.dx;
+    final next = _alongTrack(x).clamp(0.0, 1.0);
+    final thumb = _pick(x);
     var low = _lowValue;
     var high = _highValue;
     if (!widget.range) {
@@ -727,171 +741,10 @@ class _SliderCoreState extends State<_SliderCore>
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
-    final c = theme.colors;
-    final metrics = _metrics;
-    final fill = _colorOf(c, widget.color);
     final enabled = _enabled;
-    final rtl = _rtl;
-    final radius = BorderRadius.circular(metrics.height / 2);
-    final low = _lowValue;
-    final high = _highValue;
     final shown = widget.range
-        ? '${_print(low)} – ${_print(high)}'
-        : _print(high);
-
-    Widget thumb(_Thumb which) {
-      final knob = which == _Thumb.low ? _lowKnob : _highKnob;
-      final focused = which == _Thumb.low ? _lowFocused : _highFocused;
-      Widget pill = Container(
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(color: fill, borderRadius: radius),
-        child: Transform.scale(
-          scale: 1 - knob.value * (1 - _knobPressedScale),
-          // `background`, not a per-colour on-token: the status foregrounds
-          // are the darker text hues meant for soft fills, and would barely
-          // show on a solid one.
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: c.background,
-              borderRadius: radius,
-              boxShadow: theme.shadows.sm,
-            ),
-            child: const SizedBox.expand(),
-          ),
-        ),
-      );
-      if (focused) {
-        pill = DecoratedBox(
-          position: DecorationPosition.foreground,
-          decoration: BoxDecoration(
-            borderRadius: radius,
-            border: Border.all(
-              color: c.ring.withValues(alpha: 0.4),
-              width: 3,
-              strokeAlign: BorderSide.strokeAlignOutside,
-            ),
-          ),
-          child: pill,
-        );
-      }
-      return pill;
-    }
-
-    Widget semantics(_Thumb which, Widget child) {
-      final isLow = which == _Thumb.low;
-      final name = widget.semanticLabel ?? widget.label;
-      final String? label;
-      if (!widget.range) {
-        label = name;
-      } else if (isLow) {
-        label = name == null ? 'Minimum' : '$name, minimum';
-      } else {
-        label = name == null ? 'Maximum' : '$name, maximum';
-      }
-      final current = isLow ? low : high;
-      final gapValue = widget.minStepsBetweenThumbs * widget.step;
-      final max = math.max(widget.min, widget.max);
-      final floor = widget.range && !isLow ? low + gapValue : widget.min;
-      final ceiling = widget.range && isLow ? high - gapValue : max;
-      final up = _snap(math.min(current + _stepSize, ceiling));
-      final down = _snap(math.max(current - _stepSize, floor));
-      final canUp = enabled && up > current;
-      final canDown = enabled && down < current;
-      return Semantics(
-        container: true,
-        slider: true,
-        enabled: enabled,
-        label: label,
-        value: widget.range ? _print(current) : shown,
-        increasedValue: canUp ? _print(up) : null,
-        decreasedValue: canDown ? _print(down) : null,
-        onIncrease: canUp ? () => _nudge(which, steps: 1) : null,
-        onDecrease: canDown ? () => _nudge(which, steps: -1) : null,
-        child: FocusableActionDetector(
-          enabled: enabled,
-          focusNode: isLow ? _lowFocus : _highFocus,
-          autofocus: !isLow && widget.autofocus,
-          shortcuts: _shortcuts,
-          actions: isLow ? _lowActions : _highActions,
-          onShowFocusHighlight: (value) {
-            if (isLow ? _lowFocused == value : _highFocused == value) return;
-            setState(() {
-              if (isLow) {
-                _lowFocused = value;
-              } else {
-                _highFocused = value;
-              }
-            });
-          },
-          child: child,
-        ),
-      );
-    }
-
-    final track = LayoutBuilder(
-      builder: (context, constraints) {
-        _trackWidth = constraints.maxWidth;
-        return AnimatedBuilder(
-          animation: _motion,
-          builder: (context, _) {
-            final travel = math.max(_trackWidth - metrics.thumb, 0.0);
-            double left(double t) => rtl ? travel - t * travel : t * travel;
-            final lowT = _low.value;
-            final highT = _high.value;
-            // The fill runs under both thumbs rather than up to them, so
-            // neither shows a seam against it as it moves.
-            final fillWidth =
-                math.max((highT - lowT) * travel, 0.0) + metrics.thumb;
-            return SizedBox(
-              height: metrics.height,
-              width: _trackWidth,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: c.muted,
-                        borderRadius: radius,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: rtl ? left(highT) : left(lowT),
-                    top: 0,
-                    bottom: 0,
-                    width: fillWidth,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: fill,
-                        borderRadius: radius,
-                      ),
-                    ),
-                  ),
-                  if (widget.range)
-                    Positioned(
-                      key: const ValueKey(_Thumb.low),
-                      left: left(lowT),
-                      top: 0,
-                      bottom: 0,
-                      width: metrics.thumb,
-                      child: semantics(_Thumb.low, thumb(_Thumb.low)),
-                    ),
-                  Positioned(
-                    key: const ValueKey(_Thumb.high),
-                    left: left(highT),
-                    top: 0,
-                    bottom: 0,
-                    width: metrics.thumb,
-                    child: semantics(_Thumb.high, thumb(_Thumb.high)),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+        ? '${_print(_lowValue)} – ${_print(_highValue)}'
+        : _print(_highValue);
 
     final interactive = PanelHitSlop(
       slop: const EdgeInsets.all(_hitSlop),
@@ -910,67 +763,326 @@ class _SliderCoreState extends State<_SliderCore>
             onHorizontalDragEnd: enabled ? _handleDragEnd : null,
             onHorizontalDragCancel: enabled ? _handleDragEnd : null,
             onTapUp: enabled ? _handleTapUp : null,
-            child: track,
+            // A moving thumb repaints the track, and nothing past it.
+            child: RepaintBoundary(child: _track(theme, shown)),
           ),
         ),
       ),
     );
 
-    final hasHeader = widget.label != null || widget.showValue;
     return Opacity(
-      opacity: enabled ? 1 : 0.5,
+      opacity: enabled ? 1 : _disabledOpacity,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        // PanelUI's `gap-2` between the caption and the track.
         spacing: 8,
         children: [
-          if (hasHeader)
-            // The thumbs carry the name and the value for screen readers.
-            ExcludeSemantics(
-              child: Row(
-                spacing: 12,
-                children: [
-                  Expanded(
-                    child: widget.label == null
-                        ? const SizedBox.shrink()
-                        : Text(
-                            widget.label!,
-                            style: theme.typography.style(
-                              PanelTextSize.sm,
-                              weight: FontWeight.w500,
-                              color: c.foreground,
-                            ),
-                          ),
-                  ),
-                  if (widget.showValue)
-                    Text(
-                      shown,
-                      style: theme.typography.style(
-                        PanelTextSize.sm,
-                        color: c.mutedForeground,
-                      ),
-                    ),
-                ],
-              ),
+          if (widget.label != null || widget.showValue)
+            _SliderHeader(
+              label: widget.label,
+              value: widget.showValue ? shown : null,
             ),
           interactive,
         ],
       ),
     );
   }
+
+  /// The track and fill, painted, and the thumbs sliding over them on
+  /// transforms: a moving thumb costs a repaint, not a rebuild or a layout.
+  Widget _track(PanelThemeData theme, String shown) {
+    final metrics = _metrics;
+    final color = _colorOf(theme.colors, widget.color);
+    final rtl = _rtl;
+    final thumbs = {
+      if (widget.range) _Thumb.low: _thumb(_Thumb.low, color, shown),
+      _Thumb.high: _thumb(_Thumb.high, color, shown),
+    };
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _trackWidth = constraints.maxWidth;
+        final travel = math.max(_trackWidth - metrics.thumb, 0.0);
+        return SizedBox(
+          width: _trackWidth,
+          height: metrics.height,
+          child: CustomPaint(
+            painter: _TrackPainter(
+              low: _low,
+              high: _high,
+              thumbWidth: metrics.thumb,
+              track: theme.colors.muted,
+              fill: color,
+              rtl: rtl,
+            ),
+            child: Stack(
+              children: [
+                for (final MapEntry(key: which, value: thumb) in thumbs.entries)
+                  Positioned(
+                    key: ValueKey(which),
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: metrics.thumb,
+                    child: AnimatedBuilder(
+                      animation: _position(which),
+                      child: thumb,
+                      builder: (context, thumb) {
+                        final along = _position(which).value * travel;
+                        return Transform.translate(
+                          // A transform is not mirrored by the layout, so the
+                          // thumb runs the other way itself.
+                          offset: Offset(rtl ? travel - along : along, 0),
+                          child: thumb,
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// A thumb: its face, with the keyboard focus and what a screen reader
+  /// reads.
+  Widget _thumb(_Thumb which, Color color, String shown) {
+    final isLow = which == _Thumb.low;
+    final enabled = _enabled;
+    final name = widget.semanticLabel ?? widget.label;
+    final String? label;
+    if (!widget.range) {
+      label = name;
+    } else if (isLow) {
+      label = name == null ? 'Minimum' : '$name, minimum';
+    } else {
+      label = name == null ? 'Maximum' : '$name, maximum';
+    }
+    final low = _lowValue;
+    final high = _highValue;
+    final current = isLow ? low : high;
+    final gapValue = widget.minStepsBetweenThumbs * widget.step;
+    final floor = widget.range && !isLow ? low + gapValue : widget.min;
+    final ceiling = widget.range && isLow
+        ? high - gapValue
+        : math.max(widget.min, widget.max);
+    final up = _snap(math.min(current + _stepSize, ceiling));
+    final down = _snap(math.max(current - _stepSize, floor));
+    final canUp = enabled && up > current;
+    final canDown = enabled && down < current;
+    return Semantics(
+      container: true,
+      slider: true,
+      enabled: enabled,
+      label: label,
+      value: widget.range ? _print(current) : shown,
+      increasedValue: canUp ? _print(up) : null,
+      decreasedValue: canDown ? _print(down) : null,
+      onIncrease: canUp ? () => _nudge(which, steps: 1) : null,
+      onDecrease: canDown ? () => _nudge(which, steps: -1) : null,
+      child: FocusableActionDetector(
+        enabled: enabled,
+        focusNode: isLow ? _lowFocus : _highFocus,
+        autofocus: !isLow && widget.autofocus,
+        shortcuts: _shortcuts,
+        actions: isLow ? _lowActions : _highActions,
+        onShowFocusHighlight: (value) {
+          if (isLow ? _lowFocused == value : _highFocused == value) return;
+          setState(() {
+            if (isLow) {
+              _lowFocused = value;
+            } else {
+              _highFocused = value;
+            }
+          });
+        },
+        child: _ThumbFace(
+          height: _metrics.height,
+          color: color,
+          knobScale: isLow ? _lowKnobScale : _highKnobScale,
+          focused: isLow ? _lowFocused : _highFocused,
+        ),
+      ),
+    );
+  }
 }
 
-Color _colorOf(PanelColors c, PanelSliderColor color) {
-  switch (color) {
-    case PanelSliderColor.primary:
-      return c.primary;
-    case PanelSliderColor.success:
-      return c.success;
-    case PanelSliderColor.warning:
-      return c.warning;
-    case PanelSliderColor.destructive:
-      return c.destructive;
-    case PanelSliderColor.info:
-      return c.info;
+/// A thumb as drawn: a pill in the slider's colour, as tall as the track, with
+/// a knob in the page background inside it that shrinks while it is held.
+class _ThumbFace extends StatelessWidget {
+  const _ThumbFace({
+    required this.height,
+    required this.color,
+    required this.knobScale,
+    required this.focused,
+  });
+
+  final double height;
+  final Color color;
+  final Animation<double> knobScale;
+  final bool focused;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final radius = BorderRadius.circular(height / 2);
+    final face = Container(
+      padding: const EdgeInsets.all(_knobInset),
+      decoration: BoxDecoration(color: color, borderRadius: radius),
+      child: ScaleTransition(
+        scale: knobScale,
+        // `background`, not a per-colour on-token: the status foregrounds are
+        // the darker text hues meant for soft fills, and would barely show on
+        // a solid one.
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colors.background,
+            borderRadius: BorderRadius.circular(height / 2 - _knobInset),
+            boxShadow: theme.shadows.sm,
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    return focused ? _withFocusRing(face, theme.colors, radius) : face;
   }
+}
+
+/// The caption row: the label at the start and the value at the end, at
+/// least 12pt apart (PanelUI's `gap-3`). The thumbs carry both for screen
+/// readers.
+class _SliderHeader extends StatelessWidget {
+  const _SliderHeader({required this.label, required this.value});
+
+  final String? label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    return ExcludeSemantics(
+      child: Row(
+        spacing: 12,
+        children: [
+          Expanded(
+            child: label == null
+                ? const SizedBox.shrink()
+                : Text(
+                    label!,
+                    style: theme.typography.style(
+                      PanelTextSize.sm,
+                      weight: FontWeight.w500,
+                      color: c.foreground,
+                    ),
+                  ),
+          ),
+          if (value != null)
+            Text(
+              value!,
+              style: theme.typography.style(
+                PanelTextSize.sm,
+                color: c.mutedForeground,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Paints the track and the fill, which runs under both thumbs rather than
+/// up to them so neither shows a seam against it as it moves. On a one-thumb
+/// slider [low] stays at 0, and this is the ordinary fill from the start.
+class _TrackPainter extends CustomPainter {
+  _TrackPainter({
+    required this.low,
+    required this.high,
+    required this.thumbWidth,
+    required this.track,
+    required this.fill,
+    required this.rtl,
+  }) : super(repaint: Listenable.merge([low, high]));
+
+  final Animation<double> low;
+  final Animation<double> high;
+  final double thumbWidth;
+  final Color track;
+  final Color fill;
+  final bool rtl;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final radius = Radius.circular(size.height / 2);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, radius),
+      Paint()..color = track,
+    );
+    final travel = math.max(size.width - thumbWidth, 0.0);
+    final start = low.value * travel;
+    final width = math.max((high.value - low.value) * travel, 0.0) + thumbWidth;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          rtl ? size.width - start - width : start,
+          0,
+          width,
+          size.height,
+        ),
+        radius,
+      ),
+      Paint()..color = fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TrackPainter oldDelegate) =>
+      oldDelegate.low != low ||
+      oldDelegate.high != high ||
+      oldDelegate.thumbWidth != thumbWidth ||
+      oldDelegate.track != track ||
+      oldDelegate.fill != fill ||
+      oldDelegate.rtl != rtl;
+}
+
+Color _colorOf(PanelColors c, PanelSliderColor color) => switch (color) {
+  PanelSliderColor.primary => c.primary,
+  PanelSliderColor.success => c.success,
+  PanelSliderColor.warning => c.warning,
+  PanelSliderColor.destructive => c.destructive,
+  PanelSliderColor.info => c.info,
+};
+
+/// How many decimal places [value] is written with, up to ten.
+int _placesOf(double value) {
+  var scaled = value.abs();
+  var places = 0;
+  while (places < 10 && scaled != scaled.roundToDouble()) {
+    scaled *= 10;
+    places++;
+  }
+  return places;
+}
+
+/// Rings [child] the way the web package marks keyboard focus on a slider's
+/// handle (`ring-2 ring-ring ring-offset-2 ring-offset-background`): a 2pt
+/// band in the `ring` colour, held 2pt off the thumb by a band of the page
+/// background.
+Widget _withFocusRing(Widget child, PanelColors colors, BorderRadius radius) {
+  BoxDecoration band(Color color, double strokeAlign) => BoxDecoration(
+    borderRadius: radius,
+    border: Border.all(color: color, width: 2, strokeAlign: strokeAlign),
+  );
+  return DecoratedBox(
+    position: DecorationPosition.foreground,
+    // A stroke aligned at 3 runs from 2pt to 4pt outside the edge.
+    decoration: band(colors.ring, 3),
+    child: DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: band(colors.background, BorderSide.strokeAlignOutside),
+      child: child,
+    ),
+  );
 }

@@ -87,6 +87,19 @@ class _PriceState extends State<_Price> {
   }
 }
 
+/// How far the first thumb's knob is scaled: 1 at rest, 0.86 held.
+double _knobScale(WidgetTester tester) => tester
+    .widget<ScaleTransition>(
+      find
+          .descendant(
+            of: find.byType(PanelSlider),
+            matching: find.byType(ScaleTransition),
+          )
+          .first,
+    )
+    .scale
+    .value;
+
 /// Where on a 300pt md track (28pt thumb, 272pt of travel) the thumb's centre
 /// sits for [fraction].
 Offset _at(WidgetTester tester, Finder slider, double fraction) {
@@ -142,26 +155,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 16));
     expect(tester.hasRunningAnimations, isTrue);
     await tester.pumpAndSettle();
-    final held = tester.widget<Transform>(
-      find
-          .descendant(
-            of: find.byType(PanelSlider),
-            matching: find.byType(Transform),
-          )
-          .first,
-    );
-    expect(held.transform.entry(0, 0), closeTo(0.86, 0.001));
+    expect(_knobScale(tester), closeTo(0.86, 0.001));
     await gesture.up();
     await tester.pumpAndSettle();
-    final released = tester.widget<Transform>(
-      find
-          .descendant(
-            of: find.byType(PanelSlider),
-            matching: find.byType(Transform),
-          )
-          .first,
-    );
-    expect(released.transform.entry(0, 0), closeTo(1, 0.001));
+    expect(_knobScale(tester), closeTo(1, 0.001));
   });
 
   testWidgets('disabled mid-drag, it lets go and returns to its value', (
@@ -198,15 +195,7 @@ void main() {
       thumb.center.dx,
       closeTo(_at(tester, find.byType(PanelSlider), 0.2).dx, 0.5),
     );
-    final knob = tester.widget<Transform>(
-      find
-          .descendant(
-            of: find.byType(PanelSlider),
-            matching: find.byType(Transform),
-          )
-          .first,
-    );
-    expect(knob.transform.entry(0, 0), closeTo(1, 0.001));
+    expect(_knobScale(tester), closeTo(1, 0.001));
   });
 
   testWidgets('values snap to the step', (tester) async {
@@ -495,6 +484,80 @@ void main() {
       ),
     );
     expect(find.text('20 – 80'), findsOneWidget);
+  });
+
+  testWidgets('a press in the slop above the track moves nothing', (
+    tester,
+  ) async {
+    final changes = <double>[];
+    var value = 20.0;
+    await tester.pumpWidget(
+      wrap(
+        StatefulBuilder(
+          builder: (context, setState) => SizedBox(
+            width: 300,
+            // A caption above, so the slop has room inside the slider.
+            child: PanelSlider(
+              label: 'Volume',
+              value: value,
+              onChanged: (next) => setState(() {
+                changes.add(next);
+                value = next;
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    final slider = find.byType(PanelSlider);
+    final above = _at(tester, slider, 0.8) - const Offset(0, 20);
+    await tester.tapAt(above);
+    await tester.pumpAndSettle();
+    expect(changes, isEmpty);
+    // A drag that starts there still takes the thumb.
+    await tester.dragFrom(
+      Offset(_at(tester, slider, 0.2).dx, above.dy),
+      const Offset(68, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(changes.last, 45);
+  });
+
+  testWidgets('keyboard focus rings the thumb 2pt off it', (tester) async {
+    final node = FocusNode();
+    addTearDown(node.dispose);
+    await tester.pumpWidget(wrap(_Volume(focusNode: node)));
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(node.hasFocus, isTrue);
+    final ring = find.byWidgetPredicate(
+      (widget) =>
+          widget is DecoratedBox &&
+          widget.decoration is BoxDecoration &&
+          ((widget.decoration as BoxDecoration).border as Border?)?.top.color ==
+              PanelColors.panelLight.ring,
+    );
+    expect(ring, findsOneWidget);
+    final side =
+        ((tester.widget<DecoratedBox>(ring).decoration as BoxDecoration).border!
+                as Border)
+            .top;
+    expect(side.width, 2);
+    expect(side.strokeAlign, 3);
+    expect(tester.getSize(ring), const Size(28, 20));
+  });
+
+  testWidgets('a moving thumb repaints inside a boundary of its own', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(const _Volume()));
+    expect(
+      find.descendant(
+        of: find.byType(PanelSlider),
+        matching: find.byType(RepaintBoundary),
+      ),
+      findsWidgets,
+    );
   });
 
   testWidgets('every colour and size builds in every theme', (tester) async {

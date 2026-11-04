@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/semantics.dart';
 import 'package:flutter/widgets.dart';
 
@@ -36,35 +34,6 @@ enum PanelProgressSize {
 
   /// A 12pt track.
   lg,
-}
-
-const _trackHeight = {
-  PanelProgressSize.sm: 6.0,
-  PanelProgressSize.md: 8.0,
-  PanelProgressSize.lg: 12.0,
-};
-
-/// Fraction of the track covered by the sliding bar in indeterminate mode.
-const _indeterminateWidth = 0.4;
-
-/// How long the bar takes to cross the track once.
-const _sweepDuration = Duration(milliseconds: 1100);
-
-/// One half of the fade that stands in for the sweep under reduced motion.
-const _pulseDuration = Duration(milliseconds: 900);
-
-/// How far the fade goes down: faint enough to read as a pulse, not a flicker.
-const _pulseFloor = 0.35;
-
-/// Reanimated's `Easing.inOut(Easing.ease)`: the ease-in curve run forwards
-/// over the first half and mirrored over the second.
-class _InOutEase extends Curve {
-  const _InOutEase();
-
-  @override
-  double transformInternal(double t) => t < 0.5
-      ? Curves.easeIn.transform(t * 2) / 2
-      : 1 - Curves.easeIn.transform((1 - t) * 2) / 2;
 }
 
 /// A determinate or indeterminate progress bar.
@@ -134,8 +103,9 @@ class PanelProgress extends StatefulWidget {
   /// tally, anything that is not a bare percentage.
   final String? valueLabel;
 
-  /// Writes the value, for a currency or a count. The default is the share of
-  /// the range as a rounded percentage.
+  /// Writes the value, held inside the range, for a currency or a count:
+  /// Flutter's stand-in for PanelUI's `Intl` `formatOptions`. The default is
+  /// the share of the range as a rounded percentage.
   final String Function(double value)? formatValue;
 
   /// The accessible name, when [label] is not shown or not enough.
@@ -144,6 +114,24 @@ class PanelProgress extends StatefulWidget {
   @override
   State<PanelProgress> createState() => _PanelProgressState();
 }
+
+const _trackHeight = {
+  PanelProgressSize.sm: 6.0,
+  PanelProgressSize.md: 8.0,
+  PanelProgressSize.lg: 12.0,
+};
+
+/// Fraction of the track covered by the sliding bar in indeterminate mode.
+const double _indeterminateWidth = 0.4;
+
+/// How long the bar takes to cross the track once.
+const Duration _sweepDuration = Duration(milliseconds: 1100);
+
+/// One half of the fade that stands in for the sweep under reduced motion.
+const Duration _pulseDuration = Duration(milliseconds: 900);
+
+/// How far the fade goes down: faint enough to read as a pulse, not a flicker.
+const double _pulseFloor = 0.35;
 
 /// How far along [value] is, 0 to 1. An empty or inverted range has no
 /// position in it, so it reads as empty rather than dividing by zero.
@@ -166,11 +154,16 @@ String _plain(double value) =>
 
 class _PanelProgressState extends State<PanelProgress>
     with TickerProviderStateMixin {
+  /// How far the fill reaches, 0 to 1.
   late final AnimationController _fill = AnimationController.unbounded(
     vsync: this,
     value: _target,
   );
+
+  /// Where the indeterminate loop is in its cycle.
   late final AnimationController _loop = AnimationController(vsync: this);
+
+  /// Whether the platform asks for reduced motion; null until first read.
   bool? _reduced;
 
   double get _target => _fractionOf(widget.value, widget.min, widget.max);
@@ -182,6 +175,8 @@ class _PanelProgressState extends State<PanelProgress>
     if (reduced == _reduced) return;
     _reduced = reduced;
     _syncLoop();
+    // Asked for less motion mid-spring, the fill lands on its value.
+    if (reduced && !widget.indeterminate) _fill.value = _target;
   }
 
   @override
@@ -196,8 +191,9 @@ class _PanelProgressState extends State<PanelProgress>
       oldWidget.max,
     );
     if (target == oldTarget && !oldWidget.indeterminate) return;
-    // The number is the information; the overshoot is decoration, so reduced
-    // motion lands on the value instead.
+    // The fill picks up from wherever it was when the bar went
+    // indeterminate. The number is the information and the overshoot is
+    // decoration, so reduced motion lands on the value instead.
     if (_reduced ?? false) {
       _fill.value = target;
     } else {
@@ -239,7 +235,8 @@ class _PanelProgressState extends State<PanelProgress>
   }
 
   /// Whether [readout] can stand as a progress bar's value for assistive
-  /// technology: a number inside the range, or a percentage.
+  /// technology, which takes only a number inside the range or a percentage.
+  /// A readout in words keeps its words and gives up the role.
   bool _numeric(String readout) {
     if (!(widget.max > widget.min)) return false;
     final number = double.tryParse(readout);
@@ -255,26 +252,12 @@ class _PanelProgressState extends State<PanelProgress>
     final c = theme.colors;
     final indicator = _colorOf(c, widget.color);
     final indeterminate = widget.indeterminate;
-    final clamped = _clampTo(widget.value, widget.min, widget.max);
-    final spoken = _readout(clamped, _target);
-
-    final bar = SizedBox(
-      height: _trackHeight[widget.size],
-      width: double.infinity,
-      child: CustomPaint(
-        painter: _ProgressPainter(
-          fill: _fill,
-          loop: _loop,
-          indeterminate: indeterminate,
-          reduced: _reduced ?? false,
-          track: indicator.withValues(alpha: indicator.a * 0.16),
-          indicator: indicator,
-          rtl: Directionality.of(context) == TextDirection.rtl,
-        ),
-      ),
+    final spoken = _readout(
+      _clampTo(widget.value, widget.min, widget.max),
+      _target,
     );
-
     final numeric = !indeterminate && _numeric(spoken);
+
     final track = Semantics(
       container: true,
       label: widget.semanticLabel ?? widget.label,
@@ -286,67 +269,96 @@ class _PanelProgressState extends State<PanelProgress>
           : (numeric ? SemanticsRole.progressBar : null),
       minValue: numeric ? _plain(widget.min) : null,
       maxValue: numeric ? _plain(widget.max) : null,
-      child: bar,
+      // The loop repaints every frame; the boundary keeps that to the bar.
+      child: RepaintBoundary(
+        child: SizedBox(
+          height: _trackHeight[widget.size],
+          width: double.infinity,
+          child: CustomPaint(
+            painter: _ProgressPainter(
+              fill: _fill,
+              loop: _loop,
+              indeterminate: indeterminate,
+              reduced: _reduced ?? false,
+              track: indicator.withValues(alpha: indicator.a * 0.16),
+              indicator: indicator,
+              rtl: Directionality.of(context) == TextDirection.rtl,
+            ),
+          ),
+        ),
+      ),
     );
 
     // The value label is meaningless while looping, so it is dropped there.
     final showValue = widget.showValueLabel && !indeterminate;
     if (widget.label == null && !showValue) return track;
 
-    final header = ExcludeSemantics(
-      child: Row(
-        spacing: 12,
-        children: [
-          Expanded(
-            child: widget.label == null
-                ? const SizedBox.shrink()
-                : Text(
-                    widget.label!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.typography.style(
-                      PanelTextSize.sm,
-                      weight: FontWeight.w500,
-                      color: c.foreground,
-                    ),
-                  ),
-          ),
-          if (showValue)
-            Text(
-              spoken,
-              style: theme.typography.style(
-                PanelTextSize.sm,
-                color: c.mutedForeground,
-              ),
-            ),
-        ],
-      ),
-    );
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      // PanelUI's `gap-2` between the caption and the track.
       spacing: 8,
-      children: [header, track],
+      children: [
+        // The bar carries the name and the value for screen readers.
+        ExcludeSemantics(
+          child: Row(
+            children: [
+              // Expanded and ellipsised, where PanelUI lets a long label
+              // push the value off the row: an overflowing row is an error in
+              // Flutter rather than a clipped edge.
+              Expanded(
+                child: widget.label == null
+                    ? const SizedBox.shrink()
+                    : Text(
+                        widget.label!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.typography.style(
+                          PanelTextSize.sm,
+                          weight: FontWeight.w500,
+                          color: c.foreground,
+                        ),
+                      ),
+              ),
+              if (showValue)
+                Text(
+                  spoken,
+                  style: theme.typography.style(
+                    PanelTextSize.sm,
+                    color: c.mutedForeground,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        track,
+      ],
     );
   }
 }
 
-Color _colorOf(PanelColors c, PanelProgressColor color) {
-  switch (color) {
-    case PanelProgressColor.primary:
-      return c.primary;
-    case PanelProgressColor.success:
-      return c.success;
-    case PanelProgressColor.warning:
-      return c.warning;
-    case PanelProgressColor.destructive:
-      return c.destructive;
-    case PanelProgressColor.info:
-      return c.info;
-  }
+Color _colorOf(PanelColors c, PanelProgressColor color) => switch (color) {
+  PanelProgressColor.primary => c.primary,
+  PanelProgressColor.success => c.success,
+  PanelProgressColor.warning => c.warning,
+  PanelProgressColor.destructive => c.destructive,
+  PanelProgressColor.info => c.info,
+};
+
+/// Reanimated's `Easing.inOut(Easing.ease)`, which drives PanelUI's loop: the
+/// ease-in curve run forwards over the first half and mirrored over the
+/// second.
+class _InOutEase extends Curve {
+  const _InOutEase();
+
+  @override
+  double transformInternal(double t) => t < 0.5
+      ? Curves.easeIn.transform(t * 2) / 2
+      : 1 - Curves.easeIn.transform((1 - t) * 2) / 2;
 }
 
+/// Paints the track and the bar on it, repainting as [fill] or [loop] ticks
+/// without rebuilding anything.
 class _ProgressPainter extends CustomPainter {
   _ProgressPainter({
     required this.fill,
@@ -378,9 +390,10 @@ class _ProgressPainter extends CustomPainter {
     double width;
     var opacity = 1.0;
     if (!indeterminate) {
-      // The spring may overshoot past either end; the track clips it.
+      // The spring may overshoot past either end: the track clips it past
+      // the far one, and below empty there is nothing to draw.
       start = 0;
-      width = size.width * math.max(fill.value, 0);
+      width = size.width * fill.value;
     } else if (reduced) {
       // Nothing travels: the whole track carries the bar and the bar breathes.
       start = 0;

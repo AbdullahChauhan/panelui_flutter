@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -197,14 +198,7 @@ void main() {
         ),
       );
       expect(
-        tester.getSize(
-          find
-              .descendant(
-                of: find.byType(PanelToggleButton),
-                matching: find.byType(AnimatedContainer),
-              )
-              .first,
-        ),
+        tester.getSize(find.byType(PanelToggleButton)),
         Size.square(height),
         reason: size.name,
       );
@@ -303,16 +297,7 @@ void main() {
   testWidgets('the group fills in variant and size', (tester) async {
     await tester.pumpWidget(wrap(const _Group(size: PanelToggleButtonSize.sm)));
     expect(
-      tester
-          .getSize(
-            find
-                .descendant(
-                  of: find.widgetWithText(PanelToggleButton, 'Day'),
-                  matching: find.byType(AnimatedContainer),
-                )
-                .first,
-          )
-          .height,
+      tester.getSize(find.widgetWithText(PanelToggleButton, 'Day')).height,
       36,
     );
     // Buttons sit 6pt apart.
@@ -339,6 +324,133 @@ void main() {
       ),
     );
     expect(tester.takeException(), isAssertionError);
+  });
+
+  testWidgets('selection lands at once and is announced as selected', (
+    tester,
+  ) async {
+    const c = PanelColors.panelLight;
+    final handle = tester.ensureSemantics();
+    var on = false;
+    await tester.pumpWidget(
+      wrap(
+        StatefulBuilder(
+          builder: (context, setState) => PanelToggleButton(
+            value: on,
+            onChanged: (value) => setState(() => on = value),
+            child: const Text('Follow'),
+          ),
+        ),
+      ),
+    );
+    BoxDecoration face() =>
+        tester
+                .widget<Container>(
+                  find
+                      .ancestor(
+                        of: find.text('Follow'),
+                        matching: find.byType(Container),
+                      )
+                      .first,
+                )
+                .decoration!
+            as BoxDecoration;
+    expect(face().color, c.secondary);
+    await tester.tap(find.text('Follow'));
+    await tester.pump();
+    // PanelUI animates none of it, so one frame is enough.
+    expect(face().color, c.accent);
+    expect(
+      (face().border! as Border).top.color,
+      c.primary.withValues(alpha: 0.24),
+    );
+    expect(
+      tester.getSemantics(find.text('Follow')),
+      isSemantics(isChecked: true, isSelected: true, hasSelectedState: true),
+    );
+    await tester.pumpAndSettle();
+    handle.dispose();
+  });
+
+  testWidgets('a pointer lights a resting toggle as the web button does', (
+    tester,
+  ) async {
+    const c = PanelColors.panelLight;
+    await tester.pumpWidget(
+      wrap(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PanelToggleButton(onChanged: (_) {}, child: const Text('Soft')),
+            PanelToggleButton(
+              variant: PanelToggleButtonVariant.ghost,
+              onChanged: (_) {},
+              child: const Text('Ghost'),
+            ),
+          ],
+        ),
+      ),
+    );
+    Color? fill(String label) =>
+        (tester
+                    .widget<Container>(
+                      find
+                          .ancestor(
+                            of: find.text(label),
+                            matching: find.byType(Container),
+                          )
+                          .first,
+                    )
+                    .decoration!
+                as BoxDecoration)
+            .color;
+    Color? text(String label) =>
+        DefaultTextStyle.of(tester.element(find.text(label))).style.color;
+    // Hover shows where a mouse is the pointer, as on the web and desktop.
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+
+    await mouse.moveTo(tester.getCenter(find.text('Soft')));
+    await tester.pump();
+    expect(fill('Soft'), c.secondary.withValues(alpha: c.secondary.a * 0.8));
+    expect(text('Soft'), c.mutedForeground);
+
+    await mouse.moveTo(tester.getCenter(find.text('Ghost')));
+    await tester.pump();
+    expect(fill('Ghost'), c.accent);
+    expect(text('Ghost'), c.accentForeground);
+  });
+
+  testWidgets('labels take the line height of their step', (tester) async {
+    const heights = {
+      PanelToggleButtonSize.xs: 16 / 12,
+      PanelToggleButtonSize.sm: 20 / 14,
+      PanelToggleButtonSize.md: 24 / 16,
+      PanelToggleButtonSize.lg: 28 / 18,
+      PanelToggleButtonSize.xl: 28 / 18,
+    };
+    for (final MapEntry(key: size, value: height) in heights.entries) {
+      await tester.pumpWidget(
+        wrap(
+          PanelToggleButton(
+            size: size,
+            onChanged: (_) {},
+            child: const Text('Bold'),
+          ),
+        ),
+      );
+      final style = DefaultTextStyle.of(
+        tester.element(find.text('Bold')),
+      ).style;
+      expect(style.height, height, reason: size.name);
+    }
   });
 
   testWidgets('every variant and size builds in every theme', (tester) async {
