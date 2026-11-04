@@ -50,6 +50,22 @@ final List<GalleryDemo> coreDemos = [
     builder: (_) => const _ToggleDemo(),
   ),
   GalleryDemo(
+    id: 'field',
+    title: 'Field',
+    description:
+        'Settings rows with the label beside the control, and groups of '
+        'fields under a legend, with validation messages.',
+    builder: (_) => const _FieldDemo(),
+  ),
+  GalleryDemo(
+    id: 'typography',
+    title: 'Typography',
+    description:
+        'Headings, lead and body text, blockquotes, inline code and lists, '
+        'on the type scale the components use.',
+    builder: (_) => const _TypographyDemo(),
+  ),
+  GalleryDemo(
     id: 'alert',
     title: 'Alert',
     description: 'A status message whose icon and colour follow its variant.',
@@ -770,6 +786,111 @@ class _EmptyStateDemo extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _FieldDemo extends StatefulWidget {
+  const _FieldDemo();
+
+  @override
+  State<_FieldDemo> createState() => _FieldDemoState();
+}
+
+class _FieldDemoState extends State<_FieldDemo> {
+  bool _marketing = true;
+  final bool _security = true;
+  bool _digest = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 460,
+      child: PanelFieldSet(
+        legend: 'Email notifications',
+        children: [
+          PanelField(
+            orientation: Axis.horizontal,
+            title: 'Marketing emails',
+            description: 'Product updates and offers, at most weekly.',
+            child: PanelSwitch(
+              value: _marketing,
+              onChanged: (v) => setState(() => _marketing = v),
+            ),
+          ),
+          PanelField(
+            orientation: Axis.horizontal,
+            title: 'Security alerts',
+            description: 'Sign-ins from new devices. Always on for admins.',
+            isDisabled: true,
+            child: PanelSwitch(value: _security, onChanged: null),
+          ),
+          PanelField(
+            orientation: Axis.horizontal,
+            title: 'Weekly digest',
+            description: 'A summary of activity in your workspaces.',
+            child: PanelSwitch(
+              value: _digest,
+              onChanged: (v) => setState(() => _digest = v),
+            ),
+          ),
+          const PanelSeparator(),
+          const PanelField(
+            label: 'Forward to',
+            isRequired: true,
+            errors: [
+              'Enter an email address.',
+              'Use an address on a verified domain.',
+            ],
+            child: PanelInput(placeholder: 'team@example.com', isInvalid: true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TypographyDemo extends StatelessWidget {
+  const _TypographyDemo();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 12,
+      children: [
+        PanelText.h1('The Joke Tax Chronicles'),
+        PanelText.lead(
+          'Once upon a time, in a far-off land, there was a very lazy king '
+          'who spent all day lounging on his throne.',
+        ),
+        PanelText.h3('The King\'s Plan'),
+        PanelText(
+          'He came up with a brilliant plan: he would tax the jokes in the '
+          'kingdom.',
+        ),
+        PanelBlockquote(
+          child: Text(
+            '"After all," he said, "everyone enjoys a good joke, so it\'s '
+            'only fair that they should pay for the privilege."',
+          ),
+        ),
+        PanelText.h4('The Joke Tax'),
+        PanelList(
+          items: [
+            Text('1st level of puns: 5 gold coins'),
+            Text('2nd level of jokes: 10 gold coins'),
+            Text('3rd level of one-liners: 20 gold coins'),
+          ],
+        ),
+        Row(
+          spacing: 8,
+          children: [
+            PanelText.small('Install with'),
+            PanelCode('flutter pub add panelui_flutter'),
+          ],
+        ),
+      ],
     );
   }
 }
