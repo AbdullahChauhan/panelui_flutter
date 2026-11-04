@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panelui_flutter/panelui_flutter.dart';
+import 'package:panelui_flutter/src/foundation/anchored_overlay.dart';
 
 import '../helpers.dart';
 
@@ -176,6 +177,42 @@ void main() {
     expect(find.text('Copy link'), findsNothing);
   });
 
+  testWidgets('a click keeps up a press tooltip that hovering showed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        PanelTooltip(
+          message: 'Syncs every 15 minutes',
+          openOn: PanelTooltipOpenOn.press,
+          duration: Duration.zero,
+          child: _button(),
+        ),
+      ),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    final trigger = tester.getCenter(find.byKey(const Key('trigger')));
+    await mouse.moveTo(trigger);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    expect(find.text('Syncs every 15 minutes'), findsOneWidget);
+
+    await mouse.down(trigger);
+    await mouse.up();
+    await mouse.moveTo(const Offset(1, 1));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    // Kept, not toggled away, and no longer tied to the pointer.
+    expect(find.text('Syncs every 15 minutes'), findsOneWidget);
+
+    await mouse.down(trigger);
+    await mouse.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Syncs every 15 minutes'), findsNothing);
+  });
+
   testWidgets('keyboard focus shows it and Escape hides it', (tester) async {
     await tester.pumpWidget(
       wrap(PanelTooltip(message: 'Copy link', child: _button())),
@@ -319,6 +356,38 @@ void main() {
     expect(panel.width, 264);
     // A column written without `mainAxisSize: min` still sizes to its lines.
     expect(panel.height, lessThan(120));
+  });
+
+  testWidgets('the arrow is the label\'s fill, without an outline', (
+    tester,
+  ) async {
+    final c = PanelThemeData.panelLight.colors;
+    for (final variant in PanelTooltipVariant.values) {
+      await tester.pumpWidget(
+        wrap(
+          PanelTooltip(
+            message: 'Copy link',
+            variant: variant,
+            showArrow: true,
+            isOpen: true,
+            duration: Duration.zero,
+            child: _button(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final arrow = tester
+          .widget<AnchoredOverlay>(find.byType(AnchoredOverlay))
+          .arrow!;
+      final surface = variant == PanelTooltipVariant.surface;
+      expect(arrow.size, 10);
+      expect(arrow.radius, 1);
+      expect(arrow.color, surface ? c.popover : c.foreground);
+      // PanelUI gives the surface arrow a border colour but no width.
+      expect(arrow.borderWidth, 0);
+      expect(arrow.inset, surface ? 1 : 0);
+      await tester.pumpWidget(const SizedBox());
+    }
   });
 
   for (final theme in allThemes) {

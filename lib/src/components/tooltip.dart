@@ -8,11 +8,13 @@ import 'package:flutter/widgets.dart';
 import '../foundation/anchored_overlay.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
-import '../theme/panel_theme_data.dart';
 import '../theme/panel_typography.dart';
 
 /// Which side of its trigger a [PanelTooltip] prefers. It flips to the
 /// opposite side when the preferred one has less room.
+///
+/// The sides beside the trigger are named by reading order rather than
+/// PanelUI's `left` and `right`, so a right-to-left layout mirrors them.
 enum PanelTooltipPlacement {
   /// Above the trigger. The default.
   top,
@@ -100,11 +102,15 @@ const Duration _hoverExitDelay = Duration(milliseconds: 100);
 /// )
 /// ```
 ///
-/// A mouse opens it by hovering the trigger for [hoverDelay], and keyboard
-/// focus opens it at once. On touch there is no hover, so the gesture is a
-/// long press by default, with [PanelTooltipOpenOn.press] for a tap (or a
-/// click) instead. A tap anywhere else, or Escape, closes it; the tap still
-/// reaches whatever it landed on.
+/// On touch there is no hover, so the gesture is a long press by default,
+/// with [PanelTooltipOpenOn.press] for a tap instead, as in PanelUI. A mouse
+/// also opens it by hovering the trigger for [hoverDelay], and keyboard focus
+/// opens it at once; those two keep it up for as long as the pointer or the
+/// focus stays.
+///
+/// A tap anywhere else, or Escape, closes it. Unlike PanelUI's full-screen
+/// catcher, that tap still reaches whatever it landed on: a label shown
+/// because a pointer passed over a control must not cost the next click.
 ///
 /// Placement is a preference: `top` means above if above fits. The label is
 /// flipped to the other side when it has less room there, and slid along the
@@ -293,20 +299,26 @@ class _PanelTooltipState extends State<PanelTooltip> {
     if (open) {
       _visible.add(this);
       HardwareKeyboard.instance.addHandler(_handleKey);
-      // A tooltip is not a thing you deal with, so it hides itself after a
-      // beat; one held up by a resting pointer or by focus waits for those.
-      final reason = _reason ?? _OpenReason.programmatic;
-      if (widget.duration > Duration.zero &&
-          reason != _OpenReason.hover &&
-          reason != _OpenReason.focus) {
-        _autoHideTimer = Timer(widget.duration, () => _setOpen(false));
-      }
+      _armAutoHide();
       final message = widget.message;
       if (message != null) unawaited(SemanticsService.tooltip(message));
     } else {
       _visible.remove(this);
       HardwareKeyboard.instance.removeHandler(_handleKey);
       _reason = null;
+    }
+  }
+
+  /// A tooltip is not a thing you deal with, so it hides itself after
+  /// [PanelTooltip.duration]; one held up by a resting pointer or by focus
+  /// waits for those instead.
+  void _armAutoHide() {
+    _autoHideTimer?.cancel();
+    final reason = _reason ?? _OpenReason.programmatic;
+    if (widget.duration > Duration.zero &&
+        reason != _OpenReason.hover &&
+        reason != _OpenReason.focus) {
+      _autoHideTimer = Timer(widget.duration, () => _setOpen(false));
     }
   }
 
@@ -399,6 +411,15 @@ class _PanelTooltipState extends State<PanelTooltip> {
     final moved = (event.position - _tapPosition).distance > kTouchSlop;
     final held = event.timeStamp - _tapTime > kLongPressTimeout;
     if (moved || held) return;
+    if (_open && _reason == _OpenReason.hover) {
+      // Hovering showed it a moment before the click that asks for it: the
+      // click keeps it up, as a press would have opened it, rather than
+      // putting away what the reader is reaching for.
+      _hideTimer?.cancel();
+      _reason = _OpenReason.touch;
+      _armAutoHide();
+      return;
+    }
     _setOpen(!_open, _OpenReason.touch);
   }
 
@@ -410,64 +431,6 @@ class _PanelTooltipState extends State<PanelTooltip> {
 
   void _handleTapOutside() {
     if (_open) _setOpen(false);
-  }
-
-  Widget _buildPanel(PanelThemeData theme) {
-    final c = theme.colors;
-    final inverted = widget.variant == PanelTooltipVariant.inverted;
-    final fill = inverted ? c.foreground : c.popover;
-    final ink = inverted ? c.background : c.popoverForeground;
-
-    Widget body = widget.content ?? Text(widget.message!);
-    body = IconTheme.merge(
-      data: IconThemeData(color: ink, size: 14),
-      child: DefaultTextStyle(
-        style: theme.typography.style(
-          PanelTextSize.sm,
-          weight: FontWeight.w500,
-          color: ink,
-        ),
-        child: body,
-      ),
-    );
-    body = _TooltipVariantScope(variant: widget.variant, child: body);
-    // A scroller even when the label does not scroll: the content then sizes
-    // to itself however it is written (a column that would fill the height
-    // it is offered stays as tall as its children), and anything taller than
-    // the room there is is cut off at the label's edge.
-    body = ScrollConfiguration(
-      behavior: ScrollConfiguration.of(
-        context,
-      ).copyWith(scrollbars: false, overscroll: false),
-      child: SingleChildScrollView(
-        physics: widget.scrollable
-            ? const ClampingScrollPhysics()
-            : const NeverScrollableScrollPhysics(),
-        child: body,
-      ),
-    );
-
-    Widget panel = Container(
-      padding:
-          widget.padding ??
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      clipBehavior: widget.scrollable ? Clip.antiAlias : Clip.none,
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(theme.radii.lg),
-        border: inverted ? null : Border.all(color: c.border),
-        boxShadow: theme.shadows.md,
-      ),
-      child: body,
-    );
-    // The message already reaches screen readers through the trigger, so the
-    // label itself would only be read twice.
-    if (widget.message != null) {
-      panel = ExcludeSemantics(child: panel);
-    } else {
-      panel = Semantics(container: true, child: panel);
-    }
-    return panel;
   }
 
   @override
@@ -508,8 +471,17 @@ class _PanelTooltipState extends State<PanelTooltip> {
       onPanelHoverChanged: _handlePanelHover,
       motion: _tooltipMotion,
       position: AnchoredPosition(
-        placement: AnchorPlacement.values[widget.placement.index],
-        align: AnchorAlign.values[widget.align.index],
+        placement: switch (widget.placement) {
+          PanelTooltipPlacement.top => AnchorPlacement.top,
+          PanelTooltipPlacement.bottom => AnchorPlacement.bottom,
+          PanelTooltipPlacement.start => AnchorPlacement.start,
+          PanelTooltipPlacement.end => AnchorPlacement.end,
+        },
+        align: switch (widget.align) {
+          PanelTooltipAlign.start => AnchorAlign.start,
+          PanelTooltipAlign.center => AnchorAlign.center,
+          PanelTooltipAlign.end => AnchorAlign.end,
+        },
         offset: widget.offset,
         alignOffset: widget.alignOffset,
         width: widget.width,
@@ -521,18 +493,101 @@ class _PanelTooltipState extends State<PanelTooltip> {
       arrow: widget.showArrow
           ? AnchoredArrow(
               size: _arrowSize,
+              // The panel's fill alone, `rounded-[1px]`: PanelUI gives the
+              // surface arrow the border's colour but no border width, so
+              // its point carries no outline.
               color: inverted ? theme.colors.foreground : theme.colors.popover,
-              // PanelUI gives the surface arrow the border colour; its two
-              // outward edges carry it, as on the popover's arrow.
-              borderColor: inverted ? null : theme.colors.border,
-              borderWidth: inverted ? 0 : 1,
               radius: 1,
+              // Centred on the inside of a surface label's border, as React
+              // Native measures an absolute child.
               inset: inverted ? 0 : 1,
             )
           : null,
-      panel: _buildPanel(theme),
+      panel: _TooltipPanel(
+        variant: widget.variant,
+        padding: widget.padding,
+        scrollable: widget.scrollable,
+        // The message already reaches screen readers through the trigger, so
+        // the label itself would only be read twice.
+        excludeSemantics: widget.message != null,
+        child: widget.content ?? Text(widget.message!),
+      ),
       child: trigger,
     );
+  }
+}
+
+/// The label itself: PanelUI's `rounded-lg px-2.5 py-1.5 shadow-md`, in the
+/// variant's fill, with its text `text-sm font-medium` in the variant's ink.
+class _TooltipPanel extends StatelessWidget {
+  const _TooltipPanel({
+    required this.variant,
+    required this.padding,
+    required this.scrollable,
+    required this.excludeSemantics,
+    required this.child,
+  });
+
+  final PanelTooltipVariant variant;
+  final EdgeInsetsGeometry? padding;
+  final bool scrollable;
+  final bool excludeSemantics;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    final inverted = variant == PanelTooltipVariant.inverted;
+    final ink = inverted ? c.background : c.popoverForeground;
+
+    // A scroller even when the label does not scroll: the content then sizes
+    // to itself however it is written (a column that would fill the height
+    // it is offered stays as tall as its children), and anything taller than
+    // the room there is is cut off at the label's edge.
+    final body = ScrollConfiguration(
+      behavior: ScrollConfiguration.of(
+        context,
+      ).copyWith(scrollbars: false, overscroll: false),
+      child: SingleChildScrollView(
+        physics: scrollable
+            ? const ClampingScrollPhysics()
+            : const NeverScrollableScrollPhysics(),
+        child: _TooltipVariantScope(
+          variant: variant,
+          child: DefaultTextStyle(
+            style: theme.typography.style(
+              PanelTextSize.sm,
+              weight: FontWeight.w500,
+              color: ink,
+            ),
+            // Icons follow the text, at PanelUI's default icon size.
+            child: IconTheme.merge(
+              data: IconThemeData(color: ink, size: 16),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final panel = Container(
+      // A container adds its border's width to the padding, as React Native
+      // puts padding inside a border.
+      padding:
+          padding ?? const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      clipBehavior: scrollable ? Clip.antiAlias : Clip.none,
+      decoration: BoxDecoration(
+        color: inverted ? c.foreground : c.popover,
+        borderRadius: BorderRadius.circular(theme.radii.lg),
+        border: inverted ? null : Border.all(color: c.border),
+        boxShadow: theme.shadows.md,
+      ),
+      child: body,
+    );
+    return excludeSemantics
+        ? ExcludeSemantics(child: panel)
+        : Semantics(container: true, child: panel);
   }
 }
 
