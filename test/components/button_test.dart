@@ -14,6 +14,21 @@ Container _surface(WidgetTester tester, String label) => tester.widget(
 Color? _fill(WidgetTester tester, String label) =>
     (_surface(tester, label).decoration! as BoxDecoration).color;
 
+/// Moves a mouse onto [finder]. Hover shows where a pointer device is in use,
+/// as on the desktop.
+Future<void> _hover(WidgetTester tester, Finder finder) async {
+  FocusManager.instance.highlightStrategy =
+      FocusHighlightStrategy.alwaysTraditional;
+  addTearDown(
+    () => FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.automatic,
+  );
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  addTearDown(mouse.removePointer);
+  await mouse.addPointer(location: Offset.zero);
+  await mouse.moveTo(tester.getCenter(finder));
+}
+
 void main() {
   testWidgets('calls onPressed when tapped', (tester) async {
     var taps = 0;
@@ -234,13 +249,6 @@ void main() {
   testWidgets('a hovered ghost button takes the accent fill and ink', (
     tester,
   ) async {
-    // Hover shows where a pointer device is in use, as on the desktop.
-    FocusManager.instance.highlightStrategy =
-        FocusHighlightStrategy.alwaysTraditional;
-    addTearDown(
-      () => FocusManager.instance.highlightStrategy =
-          FocusHighlightStrategy.automatic,
-    );
     const theme = PanelThemeData.grassLight;
     await tester.pumpWidget(
       wrap(
@@ -252,10 +260,7 @@ void main() {
         ),
       ),
     );
-    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    addTearDown(mouse.removePointer);
-    await mouse.addPointer(location: Offset.zero);
-    await mouse.moveTo(tester.getCenter(find.text('Ghost')));
+    await _hover(tester, find.text('Ghost'));
     await tester.pump();
     // Halfway through the 150ms crossfade it is neither colour.
     await tester.pump(const Duration(milliseconds: 75));
@@ -264,6 +269,48 @@ void main() {
     expect(_fill(tester, 'Ghost'), theme.colors.accent);
     final ink = DefaultTextStyle.of(tester.element(find.text('Ghost'))).style;
     expect(ink.color, theme.colors.accentForeground);
+  });
+
+  testWidgets('a hovered outline button tints as the web one does', (
+    tester,
+  ) async {
+    const shot = Key('shot');
+    const colors = PanelColors.panelLight;
+    await tester.pumpWidget(
+      wrap(
+        RepaintBoundary(
+          key: shot,
+          child: ColoredBox(
+            color: colors.background,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: PanelButton(
+                variant: PanelButtonVariant.outline,
+                onPressed: () {},
+                child: const Text('Outline'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    // The fill beside the label, as the page shows it. The theme's neutrals
+    // are greys, so one channel stands for the colour.
+    Future<double> seen() async =>
+        (await paintedPixels(tester, find.byKey(shot)))(14, 30).r;
+
+    final rest = await seen();
+    await _hover(tester, find.text('Outline'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 75));
+    final midway = await seen();
+    await tester.pumpAndSettle();
+    // `hover:bg-accent`: the page under a 6% black tint, and no shadow
+    // showing through it.
+    final hovered = await seen();
+    expect(hovered, closeTo(1 - colors.accent.a, 1.5 / 255));
+    // On the way, a step between the two, as a browser fades it.
+    expect(midway, inExclusiveRange(hovered, rest));
   });
 
   testWidgets('a joined segment tints at once while pressed, and stays put', (

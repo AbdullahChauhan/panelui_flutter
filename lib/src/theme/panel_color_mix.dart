@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/painting.dart';
+import 'package:flutter/animation.dart';
 
 /// Colour mixing the way PanelUI's web package writes it.
 extension PanelColorMix on Color {
@@ -9,6 +9,49 @@ extension PanelColorMix on Color {
   /// package writes its hover borders and fills this way. A plain RGB lerp of
   /// a translucent token comes out darker.
   Color mixOklab(Color other, double amount) => _mixOklab(this, other, amount);
+}
+
+/// Interpolates [a] towards [b] by [t] in premultiplied alpha, which is how
+/// CSS transitions a colour.
+///
+/// Flutter's `Color.lerp` interpolates each channel on its own. Between an
+/// opaque colour and a translucent one that passes through a colour darker
+/// or lighter than either end: a white button fading to a 6% black hover tint
+/// flashes mid-grey on the way. Weighting each colour by its own opacity, as
+/// here, keeps the fade between its two ends.
+Color panelLerpColor(Color a, Color b, double t) {
+  if (t <= 0) return a;
+  if (t >= 1) return b;
+  final alpha = a.a + (b.a - a.a) * t;
+  if (alpha <= 0) return b.withValues(alpha: 0);
+  double channel(double from, double to) =>
+      ((from * a.a + (to * b.a - from * a.a) * t) / alpha).clamp(0.0, 1.0);
+  return Color.from(
+    alpha: alpha,
+    red: channel(a.r, b.r),
+    green: channel(a.g, b.g),
+    blue: channel(a.b, b.b),
+  );
+}
+
+/// A tween between two colours that fades as [panelLerpColor] does, for a
+/// hover or a state change that should move the way PanelUI's web package
+/// transitions it.
+class PanelColorTween extends Tween<Color?> {
+  /// Creates a colour tween. A null end stands for that colour's transparent
+  /// version.
+  PanelColorTween({super.begin, super.end});
+
+  @override
+  Color? lerp(double t) {
+    final from = begin, to = end;
+    if (from == null && to == null) return null;
+    return panelLerpColor(
+      from ?? to!.withValues(alpha: 0),
+      to ?? from!.withValues(alpha: 0),
+      t,
+    );
+  }
 }
 
 Color _mixOklab(Color a, Color b, double t) {

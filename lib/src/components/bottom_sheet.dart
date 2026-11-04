@@ -9,10 +9,12 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation/overlay_capture.dart';
 import '../foundation/overlay_scrim.dart';
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
+import '../theme/panel_color_mix.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
@@ -927,7 +929,7 @@ class _SheetSurface extends StatelessWidget {
       constraints: height == null
           ? BoxConstraints(maxHeight: maxHeight)
           : BoxConstraints.tightFor(height: height),
-      decoration: BoxDecoration(
+      decoration: PanelBoxDecoration(
         color: c.popover,
         // Docked, the bottom edge is not a real edge, and a line along it
         // would be a rule through the middle of nothing.
@@ -1056,7 +1058,7 @@ class _SheetCloseButton extends StatelessWidget {
             // Centred, so the glyph keeps its own size inside the circle.
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Color.lerp(
+              color: panelLerpColor(
                 c.muted,
                 c.foreground.withValues(alpha: 0.1),
                 hover,
@@ -1066,7 +1068,7 @@ class _SheetCloseButton extends StatelessWidget {
             child: PanelIcon(
               PanelIcons.x,
               size: 16,
-              color: Color.lerp(c.mutedForeground, c.foreground, hover),
+              color: panelLerpColor(c.mutedForeground, c.foreground, hover),
             ),
           ),
         ),

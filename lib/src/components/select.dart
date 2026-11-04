@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/anchored_overlay.dart';
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_hit_slop.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
@@ -608,8 +609,8 @@ class _SelectTrigger extends StatelessWidget {
       builder: (context, state) => AnimatedContainer(
         // `hover:bg-accent/40`, eased over Tailwind's default 150ms
         // `cubic-bezier(0.4, 0, 0.2, 1)`.
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.fastOutSlowIn,
+        duration: PanelDurations.hover,
+        curve: PanelCurves.standard,
         padding: EdgeInsets.symmetric(horizontal: size.horizontalPadding),
         decoration: BoxDecoration(
           borderRadius: radius,
@@ -939,7 +940,7 @@ class _SelectListBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
+      decoration: PanelBoxDecoration(
         color: c.popover,
         border: Border.all(color: c.border),
         borderRadius: BorderRadius.circular(theme.radii.xl),

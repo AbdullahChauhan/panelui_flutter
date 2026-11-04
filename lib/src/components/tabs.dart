@@ -6,7 +6,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_pressable.dart';
+import '../theme/panel_color_mix.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_theme_data.dart';
@@ -1006,7 +1008,7 @@ class _TriggerContent extends StatelessWidget {
     return IconTheme(
       data: IconThemeData(color: theme.colors.mutedForeground, size: _iconSize),
       child: TweenAnimationBuilder<Color?>(
-        tween: ColorTween(end: color),
+        tween: PanelColorTween(end: color),
         duration: panelReduceMotion(context)
             ? Duration.zero
             : _labelColorDuration,
@@ -1321,12 +1323,7 @@ class _IndicatorPainter extends CustomPainter {
       rect,
       Radius.circular(cornerRadius ?? rect.shortestSide / 2),
     );
-    for (final shadow in shadows) {
-      canvas.drawRRect(
-        rrect.shift(shadow.offset).inflate(shadow.spreadRadius),
-        shadow.toPaint(),
-      );
-    }
+    paintPanelShadows(canvas, rrect, shadows, opaque: color.a == 1);
     canvas.drawRRect(rrect, Paint()..color = color);
   }
 

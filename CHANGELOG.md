@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Hover fades now interpolate in premultiplied alpha, as CSS transitions do.
+  An outline button no longer flashes grey on its way to the hover tint.
+  Added `panelLerpColor` and `PanelColorTween`.
+- Shadows are now cast as CSS casts them: only outside the box. A translucent
+  fill, such as an outline button's hover tint or a transparent elevated
+  surface, no longer shows its own shadow through it. Added
+  `PanelBoxDecoration`, `PanelShapeDecoration` and `paintPanelShadows`.
+- The checkbox and switch hover colours mix in Oklab, as the web package's
+  `color-mix(in oklab, …)` does.
+- Gallery: the sidebar keeps its scroll position when a page opens.
+
 ## 0.1.0
 
 The first release of the port.

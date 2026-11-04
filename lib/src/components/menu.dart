@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/anchored_overlay.dart';
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
@@ -298,7 +299,7 @@ class _MenuPanel extends StatelessWidget {
     );
 
     return DecoratedBox(
-      decoration: BoxDecoration(
+      decoration: PanelBoxDecoration(
         borderRadius: radius,
         boxShadow: theme.shadows.lg,
       ),

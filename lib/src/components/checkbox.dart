@@ -4,6 +4,7 @@ import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
+import '../theme/panel_color_mix.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_tokens.dart';
@@ -346,7 +347,7 @@ class _CheckboxBox extends StatelessWidget {
         border: Border.all(
           // The web package's hover: the edge darkens a quarter of the way
           // towards the foreground.
-          color: hovered ? Color.lerp(c.input, c.foreground, 0.25)! : c.input,
+          color: hovered ? c.input.mixOklab(c.foreground, 0.25) : c.input,
         ),
       ),
       // The fill sits inside the border, as PanelUI's `absolute inset-0` fill

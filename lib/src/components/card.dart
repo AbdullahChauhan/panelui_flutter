@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_decoration.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 
@@ -59,7 +60,7 @@ class PanelCard extends StatelessWidget {
     }
     return Container(
       width: width,
-      decoration: BoxDecoration(
+      decoration: PanelBoxDecoration(
         color: theme.colors.card,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: theme.colors.border),

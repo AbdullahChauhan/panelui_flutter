@@ -183,10 +183,7 @@ void main() {
       ).isNotEmpty;
       expect(trackIs(_light.input), isTrue);
       await _hover(tester, find.byType(PanelSwitch));
-      expect(
-        trackIs(Color.lerp(_light.input, _light.foreground, 0.08)!),
-        isTrue,
-      );
+      expect(trackIs(_light.input.mixOklab(_light.foreground, 0.08)), isTrue);
     });
 
     testWidgets('keyboard focus draws a ring clear of the track', (
@@ -367,10 +364,7 @@ void main() {
       ).isNotEmpty;
       expect(edgeIs(_light.input), isTrue);
       await _hover(tester, find.byType(PanelCheckbox));
-      expect(
-        edgeIs(Color.lerp(_light.input, _light.foreground, 0.25)!),
-        isTrue,
-      );
+      expect(edgeIs(_light.input.mixOklab(_light.foreground, 0.25)), isTrue);
     });
 
     testWidgets('builds both variants in every theme', (tester) async {

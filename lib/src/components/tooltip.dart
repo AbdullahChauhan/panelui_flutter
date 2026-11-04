@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/anchored_overlay.dart';
+import '../foundation/panel_decoration.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
@@ -577,7 +578,7 @@ class _TooltipPanel extends StatelessWidget {
       padding:
           padding ?? const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       clipBehavior: scrollable ? Clip.antiAlias : Clip.none,
-      decoration: BoxDecoration(
+      decoration: PanelBoxDecoration(
         color: inverted ? c.foreground : c.popover,
         borderRadius: BorderRadius.circular(theme.radii.lg),
         border: inverted ? null : Border.all(color: c.border),

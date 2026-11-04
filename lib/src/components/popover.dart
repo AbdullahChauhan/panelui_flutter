@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../foundation/anchored_overlay.dart';
+import '../foundation/panel_decoration.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
@@ -516,7 +517,7 @@ class _PopoverPanel extends StatelessWidget {
         );
       }
       panel = DecoratedBox(
-        decoration: BoxDecoration(
+        decoration: PanelBoxDecoration(
           color: c.popover,
           border: Border.all(color: c.border),
           borderRadius: BorderRadius.circular(radius),

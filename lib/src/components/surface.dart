@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_decoration.dart';
 import '../theme/panel_theme.dart';
 
 /// A step on the elevation ladder.
@@ -117,7 +118,7 @@ class PanelSurface extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      decoration: ShapeDecoration(
+      decoration: PanelShapeDecoration(
         color: fill,
         shape: continuous
             ? RoundedSuperellipseBorder(

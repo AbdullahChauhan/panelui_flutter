@@ -192,6 +192,51 @@ void main() {
     });
   });
 
+  testWidgets('a translucent box casts its shadow outside only, as CSS does', (
+    tester,
+  ) async {
+    // A 6% black tint over white, with a button's shadow.
+    const tint = Color(0x0F000000);
+    const shadows = PanelShadows.standard;
+    final radius = BorderRadius.circular(8);
+    for (final decoration in <Decoration>[
+      PanelBoxDecoration(
+        color: tint,
+        borderRadius: radius,
+        boxShadow: shadows.sm,
+      ),
+      PanelShapeDecoration(
+        color: tint,
+        shape: RoundedSuperellipseBorder(borderRadius: radius),
+        shadows: shadows.sm,
+      ),
+    ]) {
+      const shot = Key('shot');
+      await tester.pumpWidget(
+        Center(
+          child: RepaintBoundary(
+            key: shot,
+            child: ColoredBox(
+              color: const Color(0xFFFFFFFF),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: DecoratedBox(
+                  decoration: decoration,
+                  child: const SizedBox.square(dimension: 40),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final pixel = await paintedPixels(tester, find.byKey(shot));
+      // Inside, the page through the tint and nothing more.
+      expect(pixel(30, 30).r, closeTo(1 - tint.a, 1.5 / 255));
+      // On the first row below it, the shadow.
+      expect(pixel(30, 50).r, lessThan(0.98));
+    }
+  });
+
   test("PanelCurves.inOutQuad is Reanimated's curve exactly", () {
     expect(PanelCurves.inOutQuad.transform(0.25), 0.125);
     expect(PanelCurves.inOutQuad.transform(0.5), 0.5);
@@ -217,6 +262,26 @@ void main() {
       closeTo(0.25, 1e-3),
     );
   });
+
+  test(
+    'panelLerpColor fades the way a browser does, with no grey on the way',
+    () {
+      // A white surface fading to a 6% black hover tint, seen over white. Each
+      // step lies on the straight line between the two ends.
+      const surface = Color(0xFFFFFFFF);
+      const tint = Color(0x0F000000);
+      double seen(Color c) => c.r * c.a + 1 - c.a;
+      for (final t in [0.25, 0.5, 0.75]) {
+        final expected = seen(surface) + (seen(tint) - seen(surface)) * t;
+        expect(seen(panelLerpColor(surface, tint, t)), closeTo(expected, 1e-6));
+      }
+      // A missing end is the other colour, transparent.
+      expect(
+        PanelColorTween(end: surface).lerp(0.5),
+        surface.withValues(alpha: 0.5),
+      );
+    },
+  );
 }
 
 /// A stateful child, to tell whether its state survives.

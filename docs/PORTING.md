@@ -22,6 +22,7 @@ usually carries over.
 | `lib/src/theme/panel_typography.dart` | `PanelTextSize`, `PanelTypography` (`style`, `sized`, `mono`), `PanelShadows`. |
 | `lib/src/theme/panel_motion.dart` | `PanelSprings`, `PanelDurations`, `panelEase`, `controller.springTo()`, `panelReduceMotion()`. |
 | `lib/src/foundation/panel_pressable.dart` | `PanelPressable`: press feedback, focus, hover, keyboard activation, semantics. |
+| `lib/src/foundation/panel_decoration.dart` | `PanelBoxDecoration`, `PanelShapeDecoration` and `paintPanelShadows`: shadows cast as CSS casts them. |
 | `lib/src/foundation/panel_text.dart` | `PanelText`. |
 | `lib/src/icons/` | `PanelIcon` and `PanelIcons` (PanelUI's icon names mapped onto the same HugeIcons glyphs). |
 | `lib/src/components/<name>.dart` | One file per component, or per small family of components. |
@@ -45,7 +46,7 @@ palette resolution, a group scope), `checkbox.dart` (a spring-driven control),
 | `text-[13px]` (a bare size) | `theme.typography.sized(13, …)`: size only, the font's own line height. |
 | `font-medium` / `font-semibold` / `font-bold` | `FontWeight.w500` / `w600` / `w700` |
 | `leading-tight` / `leading-normal` | `.copyWith(height: 1.25)` / `1.5` |
-| `shadow-sm`, `shadow-lg` | `theme.shadows.sm`, `theme.shadows.lg` |
+| `shadow-sm`, `shadow-lg` | `PanelBoxDecoration(boxShadow: theme.shadows.sm)`. Not a plain `BoxDecoration`: it paints the shadow under the box as well, and a translucent fill shows it through. |
 | `opacity-[0.64]` on a disabled control | `Opacity(opacity: 0.64)` |
 | `border` | `Border.all(color: …)`. A `Container` adds the border width to its padding, the same box CSS's `border-box` draws. |
 | `flex-row gap-2` | `Row(spacing: 8)` |
@@ -90,6 +91,11 @@ one shared value (a switch's thumb position and track fill).
   press.
 - Web hover colours written as `color-mix(in oklab, …)` are
   `a.mixOklab(b, amount)`.
+- Where a hover fades between an opaque colour and a translucent one (a
+  white button to a 6% tint), use `PanelColorTween` or `panelLerpColor`,
+  which interpolate in premultiplied alpha as a CSS transition does.
+  `ColorTween` and `Color.lerp`, which an `AnimatedContainer` uses, pass
+  through a grey neither end has.
 - State a control's `expanded`, `semanticValue` and `semanticRole` on
   `PanelPressable` rather than nesting a `Semantics` that relies on merging.
 - Carry PanelUI's accessibility state over to `Semantics` flags: `checked`,

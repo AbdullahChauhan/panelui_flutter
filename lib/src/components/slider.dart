@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show RangeValues;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_hit_slop.dart';
 import '../theme/panel_motion.dart';
@@ -938,7 +939,7 @@ class _ThumbFace extends StatelessWidget {
         // the darker text hues meant for soft fills, and would barely show on
         // a solid one.
         child: DecoratedBox(
-          decoration: BoxDecoration(
+          decoration: PanelBoxDecoration(
             color: theme.colors.background,
             borderRadius: BorderRadius.circular(height / 2 - _knobInset),
             boxShadow: theme.shadows.sm,

@@ -10,6 +10,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/overlay_capture.dart';
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
@@ -374,7 +375,7 @@ class PanelToast extends StatelessWidget {
       child: Container(
         // `rounded-2xl border px-4 py-3.5 shadow-lg`.
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
+        decoration: PanelBoxDecoration(
           color: c.popover,
           border: Border.all(color: border),
           borderRadius: BorderRadius.circular(theme.radii.xxl),

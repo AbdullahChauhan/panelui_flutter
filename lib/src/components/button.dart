@@ -2,8 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
+import '../theme/panel_color_mix.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_theme_data.dart';
@@ -365,7 +367,7 @@ class PanelButtonGroup extends StatelessWidget {
     if (attached) {
       final radius = _radius(theme);
       group = Container(
-        decoration: BoxDecoration(
+        decoration: PanelBoxDecoration(
           color: theme.colors.popover,
           border: Border.all(color: theme.colors.input),
           borderRadius: BorderRadius.circular(radius),
@@ -524,8 +526,10 @@ class _ButtonInkTween extends Tween<_ButtonInk> {
 
   @override
   _ButtonInk lerp(double t) => (
-    fill: Color.lerp(begin!.fill, end!.fill, t)!,
-    content: Color.lerp(begin!.content, end!.content, t)!,
+    // As CSS transitions colours: a fill fading from opaque to a translucent
+    // hover tint would otherwise flash grey on the way.
+    fill: panelLerpColor(begin!.fill, end!.fill, t),
+    content: panelLerpColor(begin!.content, end!.content, t),
   );
 }
 
@@ -696,7 +700,7 @@ class _ButtonSurface extends StatelessWidget {
       builder: (context, ink, child) => Container(
         constraints: constraints,
         padding: padding,
-        decoration: BoxDecoration(
+        decoration: PanelBoxDecoration(
           color: pressedFill ?? ink.fill,
           borderRadius: radius,
           border: Border.all(color: border),

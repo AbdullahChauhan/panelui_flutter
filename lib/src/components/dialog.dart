@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation/overlay_capture.dart';
 import '../foundation/overlay_scrim.dart';
+import '../foundation/panel_decoration.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
@@ -315,7 +316,7 @@ class PanelDialog extends StatelessWidget {
     Widget dialog = Container(
       width: double.infinity,
       constraints: BoxConstraints(maxWidth: maxWidth),
-      decoration: BoxDecoration(
+      decoration: PanelBoxDecoration(
         color: c.popover,
         border: Border.all(color: c.border),
         borderRadius: BorderRadius.circular(theme.radii.xxl),

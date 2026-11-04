@@ -163,6 +163,9 @@ class PanelTypography with Diagnosticable {
 }
 
 /// Elevation shadows, on Tailwind's scale.
+///
+/// Cast them with a `PanelBoxDecoration`, which draws them as CSS does: only
+/// outside the box.
 @immutable
 class PanelShadows with Diagnosticable {
   /// Creates a shadow scale.

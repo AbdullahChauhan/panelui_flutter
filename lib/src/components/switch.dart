@@ -1,8 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_decoration.dart';
 import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
+import '../theme/panel_color_mix.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 
@@ -200,7 +202,7 @@ class _SwitchTrack extends StatelessWidget {
     final thumb = Container(
       width: size.thumb,
       height: size.thumb,
-      decoration: BoxDecoration(
+      decoration: PanelBoxDecoration(
         // PanelUI's `bg-white`: the thumb is white in every theme.
         color: const Color(0xFFFFFFFF),
         shape: BoxShape.circle,
@@ -215,7 +217,7 @@ class _SwitchTrack extends StatelessWidget {
       decoration: BoxDecoration(
         // The web package's hover: the track darkens 8% of the way towards
         // the foreground.
-        color: hovered ? Color.lerp(c.input, c.foreground, 0.08) : c.input,
+        color: hovered ? c.input.mixOklab(c.foreground, 0.08) : c.input,
         borderRadius: pill,
       ),
       child: Stack(
