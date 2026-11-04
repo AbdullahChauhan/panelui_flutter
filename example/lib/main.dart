@@ -51,18 +51,22 @@ class _GalleryAppState extends State<GalleryApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'PanelUI for Flutter',
-      debugShowCheckedModeBanner: false,
-      theme: _material(_family.light),
-      darkTheme: _material(_family.dark),
-      themeMode: _mode,
-      home: GalleryHome(
-        family: _family,
-        onFamilyChanged: (family) => setState(() => _family = family),
-        onToggleBrightness: (dark) =>
-            setState(() => _mode = dark ? ThemeMode.light : ThemeMode.dark),
-        onlyDemo: widget.onlyDemo,
+    return GalleryScope(
+      mode: _mode,
+      onModeChanged: (mode) => setState(() => _mode = mode),
+      child: MaterialApp(
+        title: 'PanelUI for Flutter',
+        debugShowCheckedModeBanner: false,
+        theme: _material(_family.light),
+        darkTheme: _material(_family.dark),
+        themeMode: _mode,
+        home: GalleryHome(
+          family: _family,
+          onFamilyChanged: (family) => setState(() => _family = family),
+          onToggleBrightness: (dark) =>
+              setState(() => _mode = dark ? ThemeMode.light : ThemeMode.dark),
+          onlyDemo: widget.onlyDemo,
+        ),
       ),
     );
   }

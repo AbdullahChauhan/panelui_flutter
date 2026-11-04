@@ -101,7 +101,8 @@ class PanelPressable extends StatefulWidget {
   /// The cursor over the control. Defaults to a pointer while enabled.
   final MouseCursor? mouseCursor;
 
-  /// The accessible name.
+  /// The accessible name. When set it replaces the content's own text for
+  /// screen readers, so the two are not both read.
   final String? semanticLabel;
 
   /// An accessible hint describing the result of activating.
@@ -262,6 +263,10 @@ class _PanelPressableState extends State<PanelPressable>
       inMutuallyExclusiveGroup: widget.inMutuallyExclusiveGroup,
       label: widget.semanticLabel,
       hint: widget.semanticHint,
+      // A label names the control in place of its content, the way PanelUI's
+      // accessibilityLabel does; without this the visible text would be read
+      // after it a second time.
+      excludeSemantics: widget.semanticLabel != null,
       onTap: enabled && widget.onPressed != null ? widget.onPressed : null,
       onLongPress: enabled && widget.onLongPress != null
           ? widget.onLongPress

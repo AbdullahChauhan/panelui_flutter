@@ -32,6 +32,7 @@ export 'src/components/steps.dart';
 export 'src/components/surface.dart';
 export 'src/components/switch.dart';
 export 'src/components/tabs.dart';
+export 'src/components/theme_selector.dart';
 export 'src/components/toast.dart';
 export 'src/components/toggle_button.dart';
 export 'src/components/tooltip.dart';

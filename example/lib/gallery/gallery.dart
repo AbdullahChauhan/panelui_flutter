@@ -121,3 +121,23 @@ class DemoStack extends StatelessWidget {
     );
   }
 }
+
+/// The gallery app's own state, for demos that change it (the theme
+/// selector switches the whole gallery between light and dark).
+class GalleryScope extends InheritedWidget {
+  const GalleryScope({
+    super.key,
+    required this.mode,
+    required this.onModeChanged,
+    required super.child,
+  });
+
+  final ThemeMode mode;
+  final ValueChanged<ThemeMode> onModeChanged;
+
+  static GalleryScope of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<GalleryScope>()!;
+
+  @override
+  bool updateShouldNotify(GalleryScope oldWidget) => mode != oldWidget.mode;
+}

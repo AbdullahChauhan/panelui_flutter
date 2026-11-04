@@ -76,6 +76,27 @@ void main() {
       expect(values, [true]);
     });
 
+    testWidgets('reads its label once', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          PanelCheckbox(
+            value: true,
+            label: 'Accept terms',
+            description: 'Required to continue.',
+            onChanged: (_) {},
+          ),
+        ),
+      );
+      expect(
+        tester.getSemantics(find.byType(PanelCheckbox)),
+        isSemantics(
+          label: 'Accept terms',
+          hint: 'Required to continue.',
+          isChecked: true,
+        ),
+      );
+    });
+
     testWidgets('an indeterminate box resolves to true', (tester) async {
       bool? received;
       await tester.pumpWidget(

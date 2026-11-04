@@ -66,6 +66,14 @@ final List<GalleryDemo> coreDemos = [
     builder: (_) => const _TypographyDemo(),
   ),
   GalleryDemo(
+    id: 'theme-selector',
+    title: 'Theme Selector',
+    description:
+        'Light, dark or the device setting, as miniatures of a screen. Pick '
+        'one here and the whole gallery follows.',
+    builder: (_) => const _ThemeSelectorDemo(),
+  ),
+  GalleryDemo(
     id: 'alert',
     title: 'Alert',
     description: 'A status message whose icon and colour follow its variant.',
@@ -889,6 +897,33 @@ class _TypographyDemo extends StatelessWidget {
             PanelText.small('Install with'),
             PanelCode('flutter pub add panelui_flutter'),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ThemeSelectorDemo extends StatelessWidget {
+  const _ThemeSelectorDemo();
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = GalleryScope.of(context);
+    return Wrap(
+      spacing: 48,
+      runSpacing: 24,
+      children: [
+        PanelThemeSelector(
+          label: 'Appearance',
+          value: scope.mode,
+          onChanged: scope.onModeChanged,
+        ),
+        PanelThemeSelector(
+          label: 'Card artwork, small',
+          variant: PanelThemePreviewVariant.card,
+          size: PanelThemeSelectorSize.sm,
+          value: scope.mode,
+          onChanged: scope.onModeChanged,
         ),
       ],
     );
