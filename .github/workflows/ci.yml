@@ -42,7 +42,10 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: check
     runs-on: ubuntu-latest
+    # Listing permissions for a job drops every unlisted one, so checkout's
+    # read access has to be stated again here.
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
