@@ -21,15 +21,17 @@ final List<GalleryDemo> popupDemos = [
     description:
         'A panel anchored to its trigger that keeps the page around it in '
         'view. It unfolds from the trigger, flips and slides to stay on '
-        'screen, and closes on a tap outside or Escape.',
+        'screen, and closes on a tap outside or Escape. It can open as a '
+        'bottom sheet instead.',
     builder: (_) => const _PopoverDemo(),
   ),
   GalleryDemo(
     id: 'select',
     title: 'Select',
     description:
-        'A field that opens a list of options, drawn like an input so the two '
-        'sit together in a form. Arrow keys, type-ahead and Enter work too.',
+        'A field that opens a list of options in a bottom sheet, in place, or '
+        'floating over the page, with a filter for a long list. Arrow keys, '
+        'type-ahead and Enter work too.',
     builder: (_) => const _SelectDemo(),
   ),
   GalleryDemo(
@@ -43,23 +45,32 @@ final List<GalleryDemo> popupDemos = [
   ),
 ];
 
+void _noop() {}
+
 // ---------------------------------------------------------------------------
 // Tooltip
 // ---------------------------------------------------------------------------
+
+const _releaseNotes = [
+  'Textarea, sized in rows rather than pixels.',
+  'The menu panel draws on a replaceable background layer.',
+  'Tooltips follow the theme, and hold a panel of content.',
+  'The calendar frames itself and draws a continuous range.',
+  'Reasoning, Sources, Task, CodeBlock and Plan.',
+];
 
 class _TooltipDemo extends StatelessWidget {
   const _TooltipDemo();
 
   @override
   Widget build(BuildContext context) {
-    void noop() {}
     Widget tool(String label, PanelIconData icon) => PanelTooltip(
       message: label,
       showArrow: true,
       child: PanelButton(
         size: PanelButtonSize.icon,
         variant: PanelButtonVariant.ghost,
-        onPressed: noop,
+        onPressed: _noop,
         child: PanelIcon(icon),
       ),
     );
@@ -83,7 +94,7 @@ class _TooltipDemo extends StatelessWidget {
                     message: label,
                     child: PanelButton(
                       size: PanelButtonSize.icon,
-                      onPressed: noop,
+                      onPressed: _noop,
                       child: PanelIcon(icon),
                     ),
                   ),
@@ -99,7 +110,7 @@ class _TooltipDemo extends StatelessWidget {
           children: [_TooltipPlacements()],
         ),
         DemoGroup(
-          label: 'Rich content',
+          label: 'Rich content, a panel and a scrolled panel',
           children: [
             PanelTooltip(
               openOn: PanelTooltipOpenOn.press,
@@ -108,7 +119,7 @@ class _TooltipDemo extends StatelessWidget {
               content: const _ShortcutLabel(),
               child: PanelButton(
                 variant: PanelButtonVariant.secondary,
-                onPressed: noop,
+                onPressed: _noop,
                 child: const Text('Keyboard shortcut'),
               ),
             ),
@@ -136,8 +147,32 @@ class _TooltipDemo extends StatelessWidget {
               ),
               child: PanelButton(
                 variant: PanelButtonVariant.outline,
-                onPressed: noop,
+                onPressed: _noop,
                 child: const Text('What is streaming?'),
+              ),
+            ),
+            PanelTooltip(
+              openOn: PanelTooltipOpenOn.press,
+              duration: Duration.zero,
+              variant: PanelTooltipVariant.surface,
+              width: 280,
+              maxHeight: 220,
+              scrollable: true,
+              padding: const EdgeInsets.all(12),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 8,
+                children: [
+                  const PanelTooltipTitle(child: Text('What changed in 0.30')),
+                  for (final line in _releaseNotes)
+                    PanelTooltipDescription(child: Text(line)),
+                ],
+              ),
+              child: PanelButton(
+                variant: PanelButtonVariant.outline,
+                onPressed: _noop,
+                child: const Text('Release notes'),
               ),
             ),
           ],
@@ -196,7 +231,7 @@ class _TooltipPlacements extends StatelessWidget {
       child: PanelButton(
         size: PanelButtonSize.sm,
         variant: PanelButtonVariant.secondary,
-        onPressed: () {},
+        onPressed: _noop,
         child: Text(placement.name),
       ),
     );
@@ -237,6 +272,7 @@ class _PopoverDemoState extends State<_PopoverDemo> {
   final _rename = PanelPopoverController();
   final _name = TextEditingController(text: 'Untitled board');
   String _board = 'Untitled board';
+  String _sort = 'Newest';
 
   @override
   void dispose() {
@@ -283,7 +319,6 @@ class _PopoverDemoState extends State<_PopoverDemo> {
                       PanelInput(
                         controller: _name,
                         placeholder: 'Board name',
-                        size: PanelInputSize.sm,
                         autocorrect: false,
                         onSubmitted: (_) => _save(),
                       ),
@@ -317,7 +352,7 @@ class _PopoverDemoState extends State<_PopoverDemo> {
           ],
         ),
         DemoGroup(
-          label: 'With an arrow, and a title and a description',
+          label: 'An arrow, a frosted page, a long panel and a sheet',
           children: [
             PanelPopover(
               width: 240,
@@ -343,17 +378,17 @@ class _PopoverDemoState extends State<_PopoverDemo> {
               width: 256,
               align: PanelPopoverAlign.start,
               showArrow: true,
-              scrim: true,
+              blur: true,
               builder: (context, controller) => PanelButton(
                 variant: PanelButtonVariant.outline,
                 onPressed: controller.toggle,
-                child: const Text('Dim the page'),
+                child: const Text('Frost the screen'),
               ),
               children: const [
                 PanelPopoverTitle(child: Text('Focus here')),
                 PanelPopoverDescription(
                   child: Text(
-                    'The page behind is dimmed so this panel reads as the '
+                    'The page behind is frosted so this panel reads as the '
                     'only thing to deal with.',
                   ),
                 ),
@@ -380,10 +415,61 @@ class _PopoverDemoState extends State<_PopoverDemo> {
                   ),
               ],
             ),
+            PanelPopover(
+              presentation: PanelPopoverPresentation.bottomSheet,
+              builder: (context, controller) => PanelButton(
+                variant: PanelButtonVariant.outline,
+                onPressed: controller.toggle,
+                child: Text('Sort: $_sort'),
+              ),
+              children: [
+                const PanelPopoverTitle(child: Text('Sort by')),
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: PanelPopoverDescription(
+                    child: Text('The same content, presented from the bottom.'),
+                  ),
+                ),
+                for (final option in ['Newest', 'Oldest', 'Most active'])
+                  _SheetOption(
+                    label: option,
+                    onPressed: () => setState(() => _sort = option),
+                  ),
+              ],
+            ),
           ],
         ),
         const DemoGroup(label: 'Placement', children: [_PopoverPlacements()]),
       ],
+    );
+  }
+}
+
+/// A row in the popover's sheet that chooses and closes it: PanelUI's demo
+/// row, `rounded-xl px-3 py-3 active:bg-accent`.
+class _SheetOption extends StatelessWidget {
+  const _SheetOption({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    return PanelPressable(
+      pressScale: 1,
+      onPressed: () {
+        onPressed();
+        PanelPopover.of(context).close();
+      },
+      builder: (context, state) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: state.pressed || state.hovered ? theme.colors.accent : null,
+          borderRadius: BorderRadius.circular(theme.radii.xl),
+        ),
+        child: Text(label),
+      ),
     );
   }
 }
@@ -440,6 +526,13 @@ const _statuses = <PanelSelectEntry<String>>[
   PanelSelectOption(value: 'review', label: 'In review'),
   PanelSelectOption(value: 'approved', label: 'Approved'),
   PanelSelectOption(value: 'shipped', label: 'Shipped'),
+];
+
+const _regions = <PanelSelectEntry<String>>[
+  PanelSelectOption(value: 'us', label: 'United States'),
+  PanelSelectOption(value: 'eu', label: 'Europe'),
+  PanelSelectOption(value: 'ap', label: 'Asia Pacific'),
+  PanelSelectOption(value: 'sa', label: 'South America'),
 ];
 
 const _zones = <PanelSelectEntry<String>>[
@@ -501,18 +594,70 @@ class _SelectDemo extends StatefulWidget {
 
 class _SelectDemoState extends State<_SelectDemo> {
   String? _fruit;
-  String? _status = 'review';
   String? _plan;
+  String? _inlineRegion;
+  String? _status = 'review';
   String? _zone;
-  String? _city;
+  String? _contentRegion;
+  String? _fixedRegion;
   String _size = 'review';
+  String? _city;
+  String? _searchedZone;
 
   @override
   Widget build(BuildContext context) {
     return DemoStack(
       children: [
         DemoGroup(
-          label: 'Outline and filled, with an error',
+          label: 'In a bottom sheet, the default',
+          crossAxisAlignment: WrapCrossAlignment.start,
+          spacing: 24,
+          runSpacing: 24,
+          children: [
+            SizedBox(
+              width: 320,
+              child: PanelSelect<String>(
+                label: 'Favorite fruit',
+                placeholder: 'Select a fruit',
+                title: 'Favorite fruit',
+                value: _fruit,
+                onChanged: (value) => setState(() => _fruit = value),
+                options: const [
+                  PanelSelectOption(value: 'apple', label: 'Apple'),
+                  PanelSelectOption(value: 'banana', label: 'Banana'),
+                  PanelSelectOption(value: 'cherry', label: 'Cherry'),
+                  PanelSelectOption(value: 'mango', label: 'Mango'),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 320,
+              child: PanelSelect<String>(
+                label: 'Plan',
+                isRequired: true,
+                placeholder: 'Choose a plan',
+                title: 'Plan',
+                value: _plan,
+                errorMessage: _plan == null
+                    ? 'Choose a plan to continue.'
+                    : null,
+                description: 'You can change it at any time.',
+                onChanged: (value) => setState(() => _plan = value),
+                options: const [
+                  PanelSelectOption(value: 'starter', label: 'Starter'),
+                  PanelSelectOption(value: 'team', label: 'Team'),
+                  PanelSelectOption(
+                    value: 'enterprise',
+                    label: 'Enterprise — contact sales',
+                    enabled: false,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        DemoGroup(
+          label: 'In place, where the row grows, and floating over the page',
           crossAxisAlignment: WrapCrossAlignment.start,
           spacing: 24,
           runSpacing: 24,
@@ -520,39 +665,22 @@ class _SelectDemoState extends State<_SelectDemo> {
             SizedBox(
               width: 320,
               child: Column(
-                spacing: 20,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 12,
                 children: [
                   PanelSelect<String>(
-                    label: 'Favorite fruit',
-                    placeholder: 'Select a fruit',
-                    value: _fruit,
-                    onChanged: (value) => setState(() => _fruit = value),
-                    options: const [
-                      PanelSelectOption(value: 'apple', label: 'Apple'),
-                      PanelSelectOption(value: 'banana', label: 'Banana'),
-                      PanelSelectOption(value: 'cherry', label: 'Cherry'),
-                      PanelSelectOption(value: 'mango', label: 'Mango'),
-                    ],
+                    label: 'Region',
+                    presentation: PanelSelectPresentation.inline,
+                    placeholder: 'Select a region',
+                    value: _inlineRegion,
+                    onChanged: (value) => setState(() => _inlineRegion = value),
+                    options: _regions,
                   ),
-                  PanelSelect<String>(
-                    label: 'Plan',
-                    isRequired: true,
-                    placeholder: 'Choose a plan',
-                    value: _plan,
-                    errorMessage: _plan == null
-                        ? 'Choose a plan to continue.'
-                        : null,
-                    description: 'You can change it at any time.',
-                    onChanged: (value) => setState(() => _plan = value),
-                    options: const [
-                      PanelSelectOption(value: 'starter', label: 'Starter'),
-                      PanelSelectOption(value: 'team', label: 'Team'),
-                      PanelSelectOption(
-                        value: 'enterprise',
-                        label: 'Enterprise — contact sales',
-                        enabled: false,
-                      ),
-                    ],
+                  const PanelText(
+                    'This paragraph is pushed down by the list, which reads '
+                    'as the row growing.',
+                    size: PanelTextSize.sm,
+                    muted: true,
                   ),
                 ],
               ),
@@ -564,6 +692,7 @@ class _SelectDemoState extends State<_SelectDemo> {
                 children: [
                   PanelSelect<String>(
                     label: 'Status',
+                    presentation: PanelSelectPresentation.overlay,
                     variant: PanelInputVariant.filled,
                     value: _status,
                     onChanged: (value) => setState(() => _status = value),
@@ -571,6 +700,7 @@ class _SelectDemoState extends State<_SelectDemo> {
                   ),
                   PanelSelect<String>(
                     label: 'Time zone',
+                    presentation: PanelSelectPresentation.overlay,
                     variant: PanelInputVariant.filled,
                     placeholder: 'Select a time zone',
                     description: 'Grouped by region.',
@@ -579,13 +709,45 @@ class _SelectDemoState extends State<_SelectDemo> {
                     options: _zones,
                   ),
                   const PanelSelect<String>(
-                    label: 'Region',
-                    placeholder: 'Locked by your organisation',
+                    label: 'Locked',
+                    placeholder: 'Set by your organisation',
                     value: null,
                     onChanged: null,
                     options: [],
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+        DemoGroup(
+          label: 'Floating list width: its longest option, or fixed',
+          crossAxisAlignment: WrapCrossAlignment.start,
+          spacing: 24,
+          runSpacing: 24,
+          children: [
+            SizedBox(
+              width: 180,
+              child: PanelSelect<String>(
+                presentation: PanelSelectPresentation.overlay,
+                menuFitsContent: true,
+                semanticLabel: 'Region',
+                placeholder: 'Region',
+                value: _contentRegion,
+                onChanged: (value) => setState(() => _contentRegion = value),
+                options: _regions,
+              ),
+            ),
+            SizedBox(
+              width: 180,
+              child: PanelSelect<String>(
+                presentation: PanelSelectPresentation.overlay,
+                menuWidth: 220,
+                semanticLabel: 'Region',
+                placeholder: 'Region',
+                value: _fixedRegion,
+                onChanged: (value) => setState(() => _fixedRegion = value),
+                options: _regions,
               ),
             ),
           ],
@@ -599,7 +761,7 @@ class _SelectDemoState extends State<_SelectDemo> {
               child: Column(
                 spacing: 12,
                 children: [
-                  for (final size in PanelInputSize.values)
+                  for (final size in PanelSelectSize.values)
                     PanelSelect<String>(
                       size: size,
                       value: _size,
@@ -613,20 +775,36 @@ class _SelectDemoState extends State<_SelectDemo> {
           ],
         ),
         DemoGroup(
-          label: 'A long list scrolls; type a city name to jump to it',
+          label: 'Searchable: “lo” finds London and Los Angeles',
           crossAxisAlignment: WrapCrossAlignment.start,
+          spacing: 24,
+          runSpacing: 24,
           children: [
             SizedBox(
               width: 320,
               child: PanelSelect<String>(
                 label: 'City',
                 placeholder: 'Select a city',
+                title: 'City',
+                searchable: true,
                 value: _city,
                 onChanged: (value) => setState(() => _city = value),
                 options: [
                   for (final city in _cities)
                     PanelSelectOption(value: city, label: city),
                 ],
+              ),
+            ),
+            SizedBox(
+              width: 320,
+              child: PanelSelect<String>(
+                label: 'Time zone',
+                presentation: PanelSelectPresentation.overlay,
+                placeholder: 'Select a time zone',
+                searchable: true,
+                value: _searchedZone,
+                onChanged: (value) => setState(() => _searchedZone = value),
+                options: _zones,
               ),
             ),
           ],
@@ -694,7 +872,6 @@ class _MenuDemoState extends State<_MenuDemo> {
                 PanelMenuItem(
                   variant: PanelMenuItemVariant.destructive,
                   leading: const PanelIcon(PanelIcons.trash),
-                  shortcut: '⌫',
                   onSelected: () => _did('Deleted'),
                   child: const Text('Delete'),
                 ),
@@ -772,6 +949,7 @@ class _MenuDemoState extends State<_MenuDemo> {
             PanelMenu(
               align: PanelPopoverAlign.start,
               width: 248,
+              haptics: true,
               builder: button('View options'),
               children: [
                 const PanelMenuLabel('Density'),
@@ -821,7 +999,77 @@ class _MenuDemoState extends State<_MenuDemo> {
             ),
           ],
         ),
+        DemoGroup(
+          label: 'Something behind the panel, and the same rows in a sheet',
+          children: [
+            PanelMenu(
+              align: PanelPopoverAlign.start,
+              width: 224,
+              // The surface is a layer, so it can be replaced: a gradient or
+              // a blur goes in the same slot.
+              background: const _TintedSurface(),
+              builder: button('Tinted panel'),
+              children: [
+                PanelMenuItem(
+                  leading: const PanelIcon(PanelIcons.pencil),
+                  onSelected: () => _did('Renamed'),
+                  child: const Text('Rename'),
+                ),
+                PanelMenuItem(
+                  leading: const PanelIcon(PanelIcons.shareNodes),
+                  onSelected: () => _did('Shared'),
+                  child: const Text('Share'),
+                ),
+                const PanelMenuSeparator(),
+                PanelMenuItem(
+                  variant: PanelMenuItemVariant.destructive,
+                  leading: const PanelIcon(PanelIcons.trash),
+                  onSelected: () => _did('Deleted'),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+            PanelMenu(
+              presentation: PanelPopoverPresentation.bottomSheet,
+              builder: button('Open as a sheet'),
+              children: [
+                PanelMenuItem(
+                  leading: const PanelIcon(PanelIcons.shareNodes),
+                  onSelected: () => _did('Shared'),
+                  child: const Text('Share'),
+                ),
+                PanelMenuItem(
+                  leading: const PanelIcon(PanelIcons.bookmark),
+                  onSelected: () => _did('Saved for later'),
+                  child: const Text('Save for later'),
+                ),
+                const PanelMenuSeparator(),
+                PanelMenuItem(
+                  variant: PanelMenuItemVariant.destructive,
+                  leading: const PanelIcon(PanelIcons.trash),
+                  onSelected: () => _did('Deleted'),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ],
+    );
+  }
+}
+
+/// PanelUI's tinted menu surface: the overlay with a 5% wash of the
+/// foreground over it.
+class _TintedSurface extends StatelessWidget {
+  const _TintedSurface();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = PanelTheme.of(context).colors;
+    return ColoredBox(
+      color: c.overlay,
+      child: ColoredBox(color: c.foreground.withValues(alpha: 0.05)),
     );
   }
 }
