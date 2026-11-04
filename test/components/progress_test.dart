@@ -235,6 +235,35 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('the looping bar repaints inside a boundary of its own', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_bar(const PanelProgress(indeterminate: true)));
+    expect(
+      find.descendant(
+        of: find.byType(PanelProgress),
+        matching: find.byType(RepaintBoundary),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a long label gives way to the value', (tester) async {
+    await tester.pumpWidget(
+      _bar(
+        const PanelProgress(
+          value: 64,
+          label: 'Uploading the quarterly report and every attachment with it',
+          showValueLabel: true,
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    final value = tester.getRect(find.text('64%'));
+    expect(value.right, tester.getRect(find.byType(PanelProgress)).right);
+  });
+
   testWidgets('builds in every theme, colour and direction', (tester) async {
     for (final theme in allThemes) {
       for (final color in PanelProgressColor.values) {
