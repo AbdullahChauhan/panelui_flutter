@@ -71,6 +71,28 @@ void main() {
     expect(find.byType(PanelSpinner), findsNothing);
   });
 
+  testWidgets('a loading step spins even when forced complete', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        const PanelSteps(
+          value: 1,
+          children: [
+            PanelStep(),
+            PanelStep(completed: true, loading: true),
+            PanelStep(),
+          ],
+        ),
+      ),
+    );
+    expect(find.byType(PanelSpinner), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w is PanelIcon && w.icon == PanelIcons.check,
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('pressing a step selects it', (tester) async {
     final steps = <int>[];
     await tester.pumpWidget(wrap(_steps(onChanged: steps.add)));
@@ -126,20 +148,50 @@ void main() {
   testWidgets('connectors fill once the step before them is done', (
     tester,
   ) async {
-    await tester.pumpWidget(wrap(_steps(value: 1)));
     final colors = PanelThemeData.panelLight.colors;
-    final lines = tester
-        .widgetList<Container>(
-          find.byWidgetPredicate(
-            (w) =>
-                w is Container &&
-                w.constraints?.maxHeight == 2 &&
-                w.constraints?.minHeight == 2,
-          ),
-        )
-        .map((c) => c.color)
-        .toList();
-    // Two connectors for three steps; the first leads out of a done step.
-    expect(lines, [colors.primary, colors.muted]);
+    for (final orientation in Axis.values) {
+      await tester.pumpWidget(wrap(_steps(value: 1, orientation: orientation)));
+      final lines = find.descendant(
+        of: find.byType(PanelSteps),
+        matching: find.byType(ColoredBox),
+      );
+      // Two connectors for three steps; the first leads out of a done step.
+      expect(tester.widgetList<ColoredBox>(lines).map((line) => line.color), [
+        colors.primary,
+        colors.muted,
+      ]);
+      final first = tester.getSize(lines.first);
+      expect(orientation == Axis.horizontal ? first.height : first.width, 2);
+    }
+  });
+
+  testWidgets('a vertical connector runs down the middle of its circle', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(_steps(value: 1, orientation: Axis.vertical)));
+    final line = tester.getRect(
+      find
+          .descendant(
+            of: find.byType(PanelSteps),
+            matching: find.byType(ColoredBox),
+          )
+          .first,
+    );
+    final steps = tester.getRect(find.byType(PanelSteps));
+    expect(line.left - steps.left, 14);
+    expect(line.height, 32);
+  });
+
+  testWidgets('a read-only stepper still says where each step stands', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(wrap(_steps(value: 1)));
+    expect(find.bySemanticsLabel(RegExp('Billing')), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text('Billing')),
+      isSemantics(value: 'step 3 of 3, not started', isButton: false),
+    );
+    handle.dispose();
   });
 }
