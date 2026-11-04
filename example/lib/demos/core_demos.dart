@@ -42,6 +42,14 @@ final List<GalleryDemo> coreDemos = [
     builder: (_) => const _InputDemo(),
   ),
   GalleryDemo(
+    id: 'otp-number',
+    title: 'OTP Input and Number Input',
+    description:
+        'A one-time code spread over cells with a blinking caret, and a '
+        'number you can nudge (hold to repeat) or type.',
+    builder: (_) => const _CodeAndNumberDemo(),
+  ),
+  GalleryDemo(
     id: 'switch-checkbox',
     title: 'Switch and Checkbox',
     description:
@@ -924,6 +932,83 @@ class _ThemeSelectorDemo extends StatelessWidget {
           size: PanelThemeSelectorSize.sm,
           value: scope.mode,
           onChanged: scope.onModeChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _CodeAndNumberDemo extends StatefulWidget {
+  const _CodeAndNumberDemo();
+
+  @override
+  State<_CodeAndNumberDemo> createState() => _CodeAndNumberDemoState();
+}
+
+class _CodeAndNumberDemoState extends State<_CodeAndNumberDemo> {
+  final _code = TextEditingController(text: '4096');
+  double _seats = 3;
+  double _price = 12.5;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DemoStack(
+      children: [
+        DemoGroup(
+          label: 'One-time code',
+          crossAxisAlignment: WrapCrossAlignment.start,
+          spacing: 32,
+          children: [
+            PanelOtpInput(controller: _code),
+            const PanelOtpInput(
+              length: 4,
+              mask: true,
+              size: PanelOtpInputSize.sm,
+              placeholder: '0',
+            ),
+            const PanelOtpInput(
+              length: 6,
+              groupEvery: 3,
+              size: PanelOtpInputSize.sm,
+              errorMessage: 'That code has expired.',
+            ),
+          ],
+        ),
+        DemoGroup(
+          label: 'Number',
+          crossAxisAlignment: WrapCrossAlignment.start,
+          spacing: 24,
+          children: [
+            SizedBox(
+              width: 220,
+              child: PanelNumberInput(
+                label: 'Seats',
+                description: 'Between 1 and 20.',
+                value: _seats,
+                min: 1,
+                max: 20,
+                onChanged: (v) => setState(() => _seats = v),
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: PanelNumberInput(
+                label: 'Price',
+                variant: PanelInputVariant.filled,
+                size: PanelNumberInputSize.sm,
+                step: 0.5,
+                min: 0,
+                value: _price,
+                onChanged: (v) => setState(() => _price = v),
+              ),
+            ),
+          ],
         ),
       ],
     );

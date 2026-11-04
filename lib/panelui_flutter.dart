@@ -19,6 +19,8 @@ export 'src/components/input.dart';
 export 'src/components/item.dart';
 export 'src/components/label.dart';
 export 'src/components/menu.dart';
+export 'src/components/number_input.dart';
+export 'src/components/otp_input.dart';
 export 'src/components/pagination.dart';
 export 'src/components/popover.dart';
 export 'src/components/progress.dart';

@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/panel_motion.dart';
@@ -181,6 +182,14 @@ class _PanelPressableState extends State<PanelPressable>
 
   void _handleUp() {
     if (!mounted) return;
+    // A pressable disabled mid-press (a stepper reaching its bound) has its
+    // tap cancelled while the tree rebuilds; settle the state after the frame
+    // rather than marking it dirty in the middle of a build.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => _handleUp());
+      return;
+    }
     setState(() => _pressed = false);
     if (_animates) {
       _press.springTo(0, PanelSprings.press);
