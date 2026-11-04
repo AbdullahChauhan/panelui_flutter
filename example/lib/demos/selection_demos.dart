@@ -93,6 +93,7 @@ class _RadioGroupDemoState extends State<_RadioGroupDemo> {
 
   @override
   Widget build(BuildContext context) {
+    final muted = PanelTheme.of(context).colors.mutedForeground;
     return DemoStack(
       children: [
         DemoGroup(
@@ -191,22 +192,29 @@ class _RadioGroupDemoState extends State<_RadioGroupDemo> {
                       ),
                     ],
                   ),
+                  // The item does not restyle its label when chosen, so the
+                  // colour is worked out here from the group's value.
                   PanelRadioGroup<String>(
                     value: _delivery,
                     variant: PanelRadioVariant.card,
                     orientation: Axis.horizontal,
                     onChanged: (value) => setState(() => _delivery = value),
-                    children: const [
-                      PanelRadioItem(
-                        value: 'standard',
-                        label: 'Standard',
-                        description: '3–5 days',
-                      ),
-                      PanelRadioItem(
-                        value: 'express',
-                        label: 'Express',
-                        description: 'Next day',
-                      ),
+                    children: [
+                      for (final (value, label, description) in const [
+                        ('standard', 'Standard', '3–5 days'),
+                        ('express', 'Express', 'Next day'),
+                      ])
+                        PanelRadioItem(
+                          value: value,
+                          description: description,
+                          semanticLabel: label,
+                          child: Text(
+                            label,
+                            style: value == _delivery
+                                ? null
+                                : TextStyle(color: muted),
+                          ),
+                        ),
                     ],
                   ),
                 ],
