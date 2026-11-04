@@ -243,6 +243,53 @@ class _ProfileFieldsState extends State<_ProfileFields> {
 class _BottomSheetDemo extends StatelessWidget {
   const _BottomSheetDemo();
 
+  void _share(BuildContext context) {
+    showPanelBottomSheet<void>(
+      context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const PanelBottomSheetHeader(
+            title: Text('Share project'),
+            description: Text('Anyone with the link can view this project.'),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 12,
+              children: [
+                const PanelInput(placeholder: 'https://panelui.dev/p/xK2f9'),
+                PanelButton(
+                  fullWidth: true,
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Copy link'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The corner close button is on by default; a sheet the reader can drag
+  /// away or dismiss from the backdrop can do without it.
+  void _withoutClose(BuildContext context) {
+    showPanelBottomSheet<void>(
+      context,
+      showClose: false,
+      builder: (context) => const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: PanelBottomSheetHeader(
+          title: Text('Drag to dismiss'),
+          description: Text('Pull the sheet down, or tap the backdrop.'),
+        ),
+      ),
+    );
+  }
+
   void _rate(BuildContext context, {bool blur = false}) {
     showPanelBottomSheet<void>(
       context,
@@ -338,6 +385,39 @@ class _BottomSheetDemo extends StatelessWidget {
     );
   }
 
+  void _projectActions(BuildContext context) {
+    PanelButton action(String label, PanelButtonVariant variant) => PanelButton(
+      variant: variant,
+      fullWidth: true,
+      onPressed: () => Navigator.pop(context),
+      child: Text(label),
+    );
+
+    showPanelBottomSheet<void>(
+      context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const PanelBottomSheetHeader(title: Text('Project')),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 8,
+              children: [
+                action('Rename', PanelButtonVariant.ghost),
+                action('Duplicate', PanelButtonVariant.ghost),
+                action('Archive', PanelButtonVariant.ghost),
+                action('Delete', PanelButtonVariant.destructive),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _countries(BuildContext context) {
     showPanelBottomSheet<String>(
       context,
@@ -347,6 +427,8 @@ class _BottomSheetDemo extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // The heading names the behaviour, not just the task: every
+            // version of this sheet looks much the same from the outside.
             const PanelBottomSheetHeader(
               title: Text('Choose a country'),
               description: Text(
@@ -357,7 +439,7 @@ class _BottomSheetDemo extends StatelessWidget {
             PanelBottomSheetBody(
               padding: const EdgeInsets.only(bottom: 16),
               children: [
-                for (final (index, country) in _countries_.indexed)
+                for (final (index, country) in _countryNames.indexed)
                   PanelPressable(
                     pressScale: 1,
                     pressOpacity: 0.6,
@@ -401,46 +483,38 @@ class _BottomSheetDemo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    PanelButton open(String label, VoidCallback onPressed) => PanelButton(
+      variant: PanelButtonVariant.outline,
+      onPressed: onPressed,
+      child: Text(label),
+    );
+
     return DemoStack(
       children: [
         DemoGroup(
+          label: 'Basic',
+          children: [
+            open('Open sheet', () => _share(context)),
+            open('Open, no close button', () => _withoutClose(context)),
+            open('Open actions', () => _projectActions(context)),
+          ],
+        ),
+        DemoGroup(
           label: 'Detached',
           children: [
-            PanelButton(
-              variant: PanelButtonVariant.outline,
-              onPressed: () => _rate(context),
-              child: const Text('Open detached'),
-            ),
-            PanelButton(
-              variant: PanelButtonVariant.outline,
-              onPressed: () => _rate(context, blur: true),
-              child: const Text('Over a frosted screen'),
-            ),
+            open('Open detached', () => _rate(context)),
+            open('Over a frosted screen', () => _rate(context, blur: true)),
           ],
         ),
         DemoGroup(
           label: 'A form, clear of the keyboard',
-          children: [
-            PanelButton(
-              variant: PanelButtonVariant.outline,
-              onPressed: () => _invite(context),
-              child: const Text('Open form'),
-            ),
-          ],
+          children: [open('Open form', () => _invite(context))],
         ),
         DemoGroup(
           label: 'A list, and a full-height sheet',
           children: [
-            PanelButton(
-              variant: PanelButtonVariant.outline,
-              onPressed: () => _countries(context),
-              child: const Text('Open list'),
-            ),
-            PanelButton(
-              variant: PanelButtonVariant.outline,
-              onPressed: () => _filters(context),
-              child: const Text('Open filters'),
-            ),
+            open('Open list', () => _countries(context)),
+            open('Open filters', () => _filters(context)),
           ],
         ),
       ],
@@ -448,7 +522,7 @@ class _BottomSheetDemo extends StatelessWidget {
   }
 }
 
-const _countries_ = [
+const _countryNames = [
   'Somalia',
   'Kenya',
   'Ethiopia',
@@ -463,6 +537,13 @@ const _countries_ = [
   'South Africa',
 ];
 
+const _sortOptions = [
+  ('relevance', 'Most relevant'),
+  ('recent', 'Newest first'),
+  ('price-low', 'Price: low to high'),
+  ('price-high', 'Price: high to low'),
+];
+
 const _brands = [
   ('Aurora', 128),
   ('Basin', 94),
@@ -474,7 +555,9 @@ const _brands = [
 
 /// A full-height sheet is a shape as much as a size: a heading that stays
 /// put, a body that scrolls under it, and the action pinned where it can
-/// always be reached.
+/// always be reached. Filters are the honest example: there are more of them
+/// than fit, and the thing you came to press is the last thing you want to
+/// have to scroll to.
 class _FiltersSheet extends StatefulWidget {
   const _FiltersSheet();
 
@@ -483,44 +566,28 @@ class _FiltersSheet extends StatefulWidget {
 }
 
 class _FiltersSheetState extends State<_FiltersSheet> {
-  final Set<String> _brandsOn = {'Aurora'};
+  String _sort = 'relevance';
+  double _budget = 240;
   bool _inStock = true;
   bool _freeReturns = false;
-  bool _newestFirst = false;
+  final Set<String> _brandsOn = {'Aurora'};
 
   int get _active =>
       _brandsOn.length + (_inStock ? 1 : 0) + (_freeReturns ? 1 : 0);
 
+  void _toggleBrand(String brand) => setState(
+    () => _brandsOn.contains(brand)
+        ? _brandsOn.remove(brand)
+        : _brandsOn.add(brand),
+  );
+
   void _reset() => setState(() {
-    _brandsOn.clear();
+    _sort = 'relevance';
+    _budget = 240;
     _inStock = true;
     _freeReturns = false;
-    _newestFirst = false;
+    _brandsOn.clear();
   });
-
-  Widget _toggleRow(
-    String title,
-    String description,
-    bool value,
-    ValueChanged<bool> onChanged,
-  ) {
-    return Row(
-      spacing: 12,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 2,
-            children: [
-              PanelText(title, size: PanelTextSize.sm, weight: FontWeight.w500),
-              PanelText(description, size: PanelTextSize.sm, muted: true),
-            ],
-          ),
-        ),
-        PanelSwitch(value: value, onChanged: onChanged, semanticLabel: title),
-      ],
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -535,53 +602,84 @@ class _FiltersSheetState extends State<_FiltersSheet> {
           spacing: 24,
           padding: const EdgeInsets.only(bottom: 24),
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 12,
+            _FilterGroup(
+              label: 'Sort by',
               children: [
-                const PanelLabel('Sort'),
-                _toggleRow(
-                  'Newest first',
-                  'Instead of the most relevant',
-                  _newestFirst,
-                  (value) => setState(() => _newestFirst = value),
+                PanelRadioGroup<String>(
+                  value: _sort,
+                  onChanged: (value) => setState(() => _sort = value),
+                  children: [
+                    for (final (value, label) in _sortOptions)
+                      PanelRadioItem<String>(value: value, label: label),
+                  ],
                 ),
               ],
             ),
             const PanelSeparator(),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            _FilterGroup(
+              label: 'Budget',
               spacing: 12,
+              trailing: PanelText(
+                'Up to \$${_budget.round()}',
+                size: PanelTextSize.sm,
+                muted: true,
+              ),
               children: [
-                const PanelLabel('Brand'),
+                PanelSlider(
+                  value: _budget,
+                  min: 20,
+                  max: 500,
+                  step: 10,
+                  semanticLabel: 'Budget',
+                  onChanged: (value) => setState(() => _budget = value),
+                ),
+              ],
+            ),
+            const PanelSeparator(),
+            _FilterGroup(
+              label: 'Brand',
+              children: [
                 for (final (brand, count) in _brands)
-                  PanelCheckbox(
-                    value: _brandsOn.contains(brand),
-                    onChanged: (on) => setState(
-                      () => on ? _brandsOn.add(brand) : _brandsOn.remove(brand),
-                    ),
-                    label: brand,
-                    description: '$count items',
+                  PanelItem(
+                    onPressed: () => _toggleBrand(brand),
+                    title: Text(brand),
+                    description: Text('$count items'),
+                    actions: [
+                      PanelCheckbox(
+                        value: _brandsOn.contains(brand),
+                        onChanged: (_) => _toggleBrand(brand),
+                        semanticLabel: brand,
+                      ),
+                    ],
                   ),
               ],
             ),
             const PanelSeparator(),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 16,
+            _FilterGroup(
+              label: 'Availability',
               children: [
-                const PanelLabel('Availability'),
-                _toggleRow(
-                  'In stock only',
-                  'Hide anything on backorder',
-                  _inStock,
-                  (value) => setState(() => _inStock = value),
+                PanelItem(
+                  title: const Text('In stock only'),
+                  description: const Text('Hide anything on backorder'),
+                  actions: [
+                    PanelSwitch(
+                      value: _inStock,
+                      onChanged: (value) => setState(() => _inStock = value),
+                      semanticLabel: 'In stock only',
+                    ),
+                  ],
                 ),
-                _toggleRow(
-                  'Free returns',
-                  'Within 30 days of delivery',
-                  _freeReturns,
-                  (value) => setState(() => _freeReturns = value),
+                PanelItem(
+                  title: const Text('Free returns'),
+                  description: const Text('Within 30 days of delivery'),
+                  actions: [
+                    PanelSwitch(
+                      value: _freeReturns,
+                      onChanged: (value) =>
+                          setState(() => _freeReturns = value),
+                      semanticLabel: 'Free returns',
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -608,6 +706,40 @@ class _FiltersSheetState extends State<_FiltersSheet> {
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+/// One group of filters: a label, and what it sets under it.
+class _FilterGroup extends StatelessWidget {
+  const _FilterGroup({
+    required this.label,
+    required this.children,
+    this.trailing,
+    this.spacing = 8,
+  });
+
+  final String label;
+  final List<Widget> children;
+
+  /// Shown at the end of the label's line, such as the value it is set to.
+  final Widget? trailing;
+
+  /// The gap between the label and what it sets.
+  final double spacing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: spacing,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [PanelLabel(label), ?trailing],
+        ),
+        ...children,
       ],
     );
   }
