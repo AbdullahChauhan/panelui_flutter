@@ -1,12 +1,13 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/panel_pressable.dart';
 import '../foundation/panel_hit_slop.dart';
+import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_tokens.dart';
+import '../theme/panel_typography.dart';
 
 /// How a [PanelChip] is coloured at rest.
 enum PanelChipVariant {
@@ -50,74 +51,6 @@ enum PanelChipSize {
   xl,
 }
 
-class _ChipMetrics {
-  const _ChipMetrics({
-    required this.height,
-    required this.gap,
-    required this.padding,
-    required this.fontSize,
-    required this.close,
-    required this.closeIcon,
-  });
-
-  final double height;
-  final double gap;
-  final double padding;
-  final double fontSize;
-
-  /// The ✕ target, a circle as tall as this.
-  final double close;
-
-  /// The ✕ glyph, scaled with the pill so it never looks stranded.
-  final double closeIcon;
-}
-
-const _chipMetrics = {
-  PanelChipSize.xs: _ChipMetrics(
-    height: 20,
-    gap: 2,
-    padding: 6,
-    fontSize: 11,
-    close: 14,
-    closeIcon: 9,
-  ),
-  PanelChipSize.sm: _ChipMetrics(
-    height: 24,
-    gap: 4,
-    padding: 8,
-    fontSize: 12,
-    close: 16,
-    closeIcon: 11,
-  ),
-  PanelChipSize.md: _ChipMetrics(
-    height: 28,
-    gap: 6,
-    padding: 10,
-    fontSize: 14,
-    close: 20,
-    closeIcon: 13,
-  ),
-  PanelChipSize.lg: _ChipMetrics(
-    height: 36,
-    gap: 8,
-    padding: 14,
-    fontSize: 16,
-    close: 24,
-    closeIcon: 15,
-  ),
-  PanelChipSize.xl: _ChipMetrics(
-    height: 44,
-    gap: 8,
-    padding: 16,
-    fontSize: 16,
-    close: 28,
-    closeIcon: 17,
-  ),
-};
-
-Color _fade(Color color, double factor) =>
-    color.withValues(alpha: color.a * factor);
-
 /// A compact, interactive token: the filter in a filter bar, the tag on a
 /// photo, the removable recipient in a "To:" field.
 ///
@@ -142,7 +75,7 @@ Color _fade(Color color, double factor) =>
 ///
 /// A chip with neither [onPressed] nor [selected] is a static tag: it does not
 /// shrink under a finger or take focus, so it does not invite a tap. Icons
-/// passed as [leading] take the colour of the label.
+/// passed as [leading] are drawn in the label's colour and at its size.
 class PanelChip extends StatelessWidget {
   /// Creates a chip.
   const PanelChip({
@@ -206,29 +139,6 @@ class PanelChip extends StatelessWidget {
   /// Whether to take focus when first built.
   final bool autofocus;
 
-  (Color fill, Color border, Color foreground) _palette(PanelColors c) {
-    const clear = Color(0x00000000);
-    if (selected ?? false) {
-      return (c.accent, c.primary.withValues(alpha: 0.24), c.accentForeground);
-    }
-    switch (variant) {
-      case PanelChipVariant.neutral:
-        return (c.secondary, clear, c.secondaryForeground);
-      case PanelChipVariant.primary:
-        return (c.primary, clear, c.primaryForeground);
-      case PanelChipVariant.outline:
-        return (clear, c.border, c.foreground);
-      case PanelChipVariant.success:
-        return (c.successSubtle, clear, c.successForeground);
-      case PanelChipVariant.warning:
-        return (c.warningSubtle, clear, c.warningForeground);
-      case PanelChipVariant.info:
-        return (c.infoSubtle, clear, c.infoForeground);
-      case PanelChipVariant.destructive:
-        return (c.destructiveSubtle, clear, c.destructiveForeground);
-    }
-  }
-
   void _press() {
     if (haptics) HapticFeedback.selectionClick();
     onPressed?.call();
@@ -241,139 +151,349 @@ class PanelChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = PanelTheme.of(context);
-    final c = theme.colors;
-    final m = _chipMetrics[size]!;
-    final (fill, border, foreground) = _palette(c);
-    final isToggle = selected != null;
-    final pressable = onPressed != null || isToggle;
-    final closable = onClose != null;
-    final radius = BorderRadius.circular(m.height / 2);
-    final labelStyle = theme.typography.sized(
-      m.fontSize,
-      weight: FontWeight.w500,
-      color: foreground,
+    final metrics = _chipMetrics[size]!;
+    final palette = _paletteOf(
+      PanelTheme.of(context).colors,
+      variant,
+      selected: selected ?? false,
+    );
+    final close = onClose == null
+        ? null
+        : _ChipClose(
+            metrics: metrics,
+            color: palette.foreground,
+            label: closeLabel,
+            onPressed: enabled ? _close : null,
+          );
+    // A name replaces the label rather than repeating it, and leaves the ✕
+    // to be read as the button it is.
+    final label = semanticLabel == null
+        ? child
+        : Semantics(label: semanticLabel, excludeSemantics: true, child: child);
+
+    Widget pill({bool hovered = false, bool focused = false}) => _ChipPill(
+      metrics: metrics,
+      palette: palette,
+      hovered: hovered,
+      focused: focused,
+      leading: leading,
+      label: label,
+      close: close,
     );
 
-    // The web package's hover: a primary fill lightens as a button's does,
-    // the neutral one thins, and the rest take the accent tint over them.
-    final Color hoverFill;
-    if (selected ?? false) {
-      hoverFill = Color.alphaBlend(c.accent, fill);
-    } else if (variant == PanelChipVariant.primary) {
-      hoverFill = _fade(fill, 0.9);
-    } else if (variant == PanelChipVariant.neutral) {
-      hoverFill = _fade(fill, 0.8);
-    } else {
-      hoverFill = Color.alphaBlend(c.accent, fill);
-    }
+    return Align(
+      // PanelUI's `self-start`: a chip keeps its own size in a column that
+      // stretches.
+      alignment: AlignmentDirectional.centerStart,
+      widthFactor: 1,
+      heightFactor: 1,
+      child: Opacity(
+        opacity: enabled ? 1 : _disabledOpacity,
+        child: onPressed != null || selected != null
+            ? PanelPressable(
+                onPressed: enabled ? _press : null,
+                selected: selected,
+                focusNode: focusNode,
+                autofocus: autofocus,
+                builder: (context, state) =>
+                    pill(hovered: state.hovered, focused: state.focused),
+              )
+            : pill(),
+      ),
+    );
+  }
+}
 
-    Widget? close;
-    if (closable) {
-      close = PanelHitSlop(
-        // A small pill leaves little room for the ✕; the slop gives the
-        // finger the target the pixels do not.
-        slop: const EdgeInsets.all(8),
-        child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.backspace): () {
-              if (enabled) _close();
-            },
-            const SingleActivator(LogicalKeyboardKey.delete): () {
-              if (enabled) _close();
-            },
-          },
-          child: PanelPressable(
-            onPressed: enabled ? _close : null,
-            pressScale: 1,
-            semanticLabel: closeLabel,
-            focusRingRadius: BorderRadius.circular(m.close / 2),
-            // The web package's hover: a faint disc behind the ✕, which
-            // comes up to full strength.
-            builder: (context, state) => Container(
-              width: m.close,
-              height: m.close,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: state.hovered
-                    ? foreground.withValues(alpha: foreground.a * 0.1)
-                    : null,
-                shape: BoxShape.circle,
-              ),
-              child: Opacity(
-                opacity: state.hovered ? 1 : 0.7,
-                child: PanelIcon(
-                  PanelIcons.x,
-                  size: m.closeIcon,
-                  color: foreground,
-                ),
-              ),
-            ),
+/// PanelUI's `opacity-[0.56]` on a disabled chip.
+const double _disabledOpacity = 0.56;
+
+class _ChipMetrics {
+  const _ChipMetrics({
+    required this.height,
+    required this.gap,
+    required this.padding,
+    required this.labelStep,
+    required this.fontSize,
+    required this.close,
+    required this.closeIcon,
+  });
+
+  final double height;
+  final double gap;
+  final double padding;
+
+  /// The label's step on the type scale, or null for a bare `text-[11px]`,
+  /// which keeps the font's own line height.
+  final PanelTextSize? labelStep;
+
+  /// The label's size, which a leading icon is drawn at too.
+  final double fontSize;
+
+  /// The ✕ target, a circle as tall as this.
+  final double close;
+
+  /// The ✕ glyph, scaled with the pill so it never looks stranded.
+  final double closeIcon;
+
+  TextStyle labelStyle(PanelTypography typography, Color color) {
+    final step = labelStep;
+    return step == null
+        ? typography.sized(fontSize, weight: FontWeight.w500, color: color)
+        : typography.style(step, weight: FontWeight.w500, color: color);
+  }
+}
+
+const _chipMetrics = {
+  PanelChipSize.xs: _ChipMetrics(
+    height: 20,
+    gap: 2,
+    padding: 6,
+    labelStep: null,
+    fontSize: 11,
+    close: 14,
+    closeIcon: 9,
+  ),
+  PanelChipSize.sm: _ChipMetrics(
+    height: 24,
+    gap: 4,
+    padding: 8,
+    labelStep: PanelTextSize.xs,
+    fontSize: 12,
+    close: 16,
+    closeIcon: 11,
+  ),
+  PanelChipSize.md: _ChipMetrics(
+    height: 28,
+    gap: 6,
+    padding: 10,
+    labelStep: PanelTextSize.sm,
+    fontSize: 14,
+    close: 20,
+    closeIcon: 13,
+  ),
+  PanelChipSize.lg: _ChipMetrics(
+    height: 36,
+    gap: 8,
+    padding: 14,
+    labelStep: PanelTextSize.base,
+    fontSize: 16,
+    close: 24,
+    closeIcon: 15,
+  ),
+  PanelChipSize.xl: _ChipMetrics(
+    height: 44,
+    gap: 8,
+    padding: 16,
+    labelStep: PanelTextSize.base,
+    fontSize: 16,
+    close: 28,
+    closeIcon: 17,
+  ),
+};
+
+/// A chip's colours: its fill at rest and under a hovering pointer, its edge,
+/// and the colour of its label, icons and ✕.
+typedef _ChipPalette = ({
+  Color fill,
+  Color hoverFill,
+  Color border,
+  Color foreground,
+});
+
+_ChipPalette _paletteOf(
+  PanelColors c,
+  PanelChipVariant variant, {
+  required bool selected,
+}) {
+  const clear = Color(0x00000000);
+  final (fill, border, foreground) = selected
+      ? (c.accent, _fade(c.primary, 0.24), c.accentForeground)
+      : switch (variant) {
+          PanelChipVariant.neutral => (
+            c.secondary,
+            clear,
+            c.secondaryForeground,
           ),
-        ),
-      );
-    }
+          PanelChipVariant.primary => (c.primary, clear, c.primaryForeground),
+          PanelChipVariant.outline => (clear, c.border, c.foreground),
+          PanelChipVariant.success => (
+            c.successSubtle,
+            clear,
+            c.successForeground,
+          ),
+          PanelChipVariant.warning => (
+            c.warningSubtle,
+            clear,
+            c.warningForeground,
+          ),
+          PanelChipVariant.info => (c.infoSubtle, clear, c.infoForeground),
+          PanelChipVariant.destructive => (
+            c.destructiveSubtle,
+            clear,
+            c.destructiveForeground,
+          ),
+        };
+  return (
+    fill: fill,
+    // The web package's hover, `bg-muted/60`, laid over the resting fill. A
+    // selected chip keeps its fill, as the web's pressed state outranks it.
+    hoverFill: selected ? fill : Color.alphaBlend(_fade(c.muted, 0.6), fill),
+    border: border,
+    foreground: foreground,
+  );
+}
 
-    Widget pill(bool hovered) => Container(
-      height: m.height,
+/// The pill: an optional leading icon, the label and the ✕, on the fill.
+class _ChipPill extends StatelessWidget {
+  const _ChipPill({
+    required this.metrics,
+    required this.palette,
+    required this.hovered,
+    required this.focused,
+    required this.leading,
+    required this.label,
+    required this.close,
+  });
+
+  final _ChipMetrics metrics;
+  final _ChipPalette palette;
+  final bool hovered;
+  final bool focused;
+  final Widget? leading;
+  final Widget label;
+  final Widget? close;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final radius = BorderRadius.circular(metrics.height / 2);
+    final pill = Container(
+      height: metrics.height,
       // The ✕ hugs the end edge: PanelUI trims the end padding to 4 and pulls
       // the ✕ out by the same 4.
       padding: EdgeInsetsDirectional.only(
-        start: m.padding,
-        end: closable ? 0 : m.padding,
+        start: metrics.padding,
+        end: close == null ? metrics.padding : 0,
       ),
       decoration: BoxDecoration(
-        color: hovered ? hoverFill : fill,
-        border: Border.all(color: border),
+        color: hovered ? palette.hoverFill : palette.fill,
+        border: Border.all(color: palette.border),
         borderRadius: radius,
       ),
       child: IconTheme(
-        data: IconThemeData(color: foreground, size: m.fontSize),
+        data: IconThemeData(color: palette.foreground, size: metrics.fontSize),
         child: DefaultTextStyle(
-          style: labelStyle,
+          style: metrics.labelStyle(theme.typography, palette.foreground),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            spacing: m.gap,
+            spacing: metrics.gap,
             children: [
               ?leading,
-              // An explicit name replaces the label rather than repeating it.
-              Flexible(
-                child: semanticLabel == null
-                    ? child
-                    : ExcludeSemantics(child: child),
-              ),
+              Flexible(child: label),
               ?close,
             ],
           ),
         ),
       ),
     );
+    return focused ? _withFocusRing(pill, theme.colors, radius) : pill;
+  }
+}
 
-    Widget chip;
-    if (pressable) {
-      chip = PanelPressable(
-        onPressed: enabled ? _press : null,
-        selected: isToggle ? selected : null,
-        semanticLabel: semanticLabel,
-        focusNode: focusNode,
-        autofocus: autofocus,
-        focusRingRadius: radius,
-        builder: (context, state) => pill(state.hovered),
-      );
-    } else {
-      chip = pill(false);
-      if (semanticLabel != null) {
-        chip = Semantics(label: semanticLabel, child: chip);
-      }
-    }
+/// The ✕: a target of its own inside the pill, drawn in the chip's colour at
+/// 70%, and full strength on a faint disc while a pointer is over it.
+class _ChipClose extends StatelessWidget {
+  const _ChipClose({
+    required this.metrics,
+    required this.color,
+    required this.label,
+    required this.onPressed,
+  });
 
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      widthFactor: 1,
-      heightFactor: 1,
-      child: Opacity(opacity: enabled ? 1 : 0.56, child: chip),
+  final _ChipMetrics metrics;
+  final Color color;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = PanelTheme.of(context).colors;
+    final radius = BorderRadius.circular(metrics.close / 2);
+    void remove() => onPressed?.call();
+    return PanelHitSlop(
+      // A small pill leaves little room for the ✕; the slop gives the finger
+      // the target the pixels do not. Outside the key bindings, whose focus
+      // scope is a box of its own that would turn a press in the slop away.
+      slop: const EdgeInsets.all(8),
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.backspace): remove,
+          const SingleActivator(LogicalKeyboardKey.delete): remove,
+        },
+        child: PanelPressable(
+          onPressed: onPressed,
+          // A plain Pressable in PanelUI: no press shrink.
+          pressScale: 1,
+          semanticLabel: label,
+          builder: (context, state) {
+            final mark = Container(
+              width: metrics.close,
+              height: metrics.close,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                // The web package's hover, in the chip's own colour so it shows
+                // on every fill.
+                color: state.hovered ? _fade(color, 0.1) : null,
+                shape: BoxShape.circle,
+              ),
+              child: Opacity(
+                opacity: state.hovered ? 1 : 0.7,
+                child: PanelIcon(
+                  PanelIcons.x,
+                  size: metrics.closeIcon,
+                  color: color,
+                ),
+              ),
+            );
+            return state.focused
+                ? _withFocusRing(mark, colors, radius, offset: false)
+                : mark;
+          },
+        ),
+      ),
     );
   }
+}
+
+Color _fade(Color color, double factor) =>
+    color.withValues(alpha: color.a * factor);
+
+/// Rings [child] the way the web package marks keyboard focus on a chip: a
+/// 2pt band in the `ring` colour, held 2pt off the pill by a band of the page
+/// background (`ring-2 ring-ring ring-offset-2 ring-offset-background`). The
+/// ✕ is ringed against its edge, with no [offset] (`ring-2 ring-ring`).
+Widget _withFocusRing(
+  Widget child,
+  PanelColors colors,
+  BorderRadius radius, {
+  bool offset = true,
+}) {
+  BoxDecoration band(Color color, double strokeAlign) => BoxDecoration(
+    borderRadius: radius,
+    border: Border.all(color: color, width: 2, strokeAlign: strokeAlign),
+  );
+  final ring = DecoratedBox(
+    position: DecorationPosition.foreground,
+    // A 2pt stroke aligned at 3 runs from 2pt to 4pt outside the edge.
+    decoration: band(colors.ring, offset ? 3 : BorderSide.strokeAlignOutside),
+    child: child,
+  );
+  if (!offset) return ring;
+  return DecoratedBox(
+    position: DecorationPosition.foreground,
+    decoration: band(colors.background, BorderSide.strokeAlignOutside),
+    child: ring,
+  );
 }
