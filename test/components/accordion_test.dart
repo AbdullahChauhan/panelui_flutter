@@ -364,6 +364,26 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('an open body is not clipped', (tester) async {
+      await tester.pumpWidget(wrap(collapsible()));
+      await tester.pumpAndSettle();
+      ClipRect clip() => tester.widget<ClipRect>(
+        find
+            .ancestor(
+              of: find.text('Count 0', skipOffstage: false),
+              matching: find.byType(ClipRect),
+            )
+            .first,
+      );
+      expect(clip().clipBehavior, Clip.hardEdge);
+      await tester.tap(find.text('What is included'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(clip().clipBehavior, Clip.hardEdge);
+      await tester.pumpAndSettle();
+      // Settled open, the body draws as it would anywhere else.
+      expect(clip().clipBehavior, Clip.none);
+    });
+
     testWidgets('with reduced motion it snaps open', (tester) async {
       await tester.pumpWidget(
         wrap(
