@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
@@ -310,16 +311,6 @@ double _boxRadius(PanelCheckboxSize size, PanelRadii radii) => switch (size) {
   PanelCheckboxSize.xl => radii.lg,
 };
 
-/// The web package's keyboard focus ring (`ring-2 ring-ring ring-offset-2`):
-/// 2pt of [color] standing 2pt clear of the control. The gap is left
-/// see-through rather than painted in the page colour.
-Border _focusRing(Color color) => Border.all(
-  color: color,
-  width: 2,
-  // Outside the edge and past the gap: from 2pt to 4pt out.
-  strokeAlign: 3,
-);
-
 /// The box, with its fill and glyph.
 class _CheckboxBox extends StatelessWidget {
   const _CheckboxBox({
@@ -346,7 +337,7 @@ class _CheckboxBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = PanelTheme.of(context).colors;
     final shape = BorderRadius.circular(radius);
-    Widget box = Container(
+    final Widget box = Container(
       width: dimension,
       height: dimension,
       decoration: BoxDecoration(
@@ -376,17 +367,13 @@ class _CheckboxBox extends StatelessWidget {
         ),
       ),
     );
-    if (focused) {
-      box = DecoratedBox(
-        position: DecorationPosition.foreground,
-        decoration: BoxDecoration(
-          borderRadius: shape,
-          border: _focusRing(c.ring),
-        ),
-        child: box,
-      );
-    }
-    return box;
+    // The web package's `ring-2 ring-ring ring-offset-2`.
+    return PanelFocusRing(
+      visible: focused,
+      borderRadius: shape,
+      style: PanelFocusRingStyle.offset,
+      child: box,
+    );
   }
 }
 

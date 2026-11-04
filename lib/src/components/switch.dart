@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
@@ -207,7 +208,7 @@ class _SwitchTrack extends StatelessWidget {
       ),
     );
 
-    Widget track = Container(
+    final Widget track = Container(
       width: size.width,
       height: size.height,
       padding: const EdgeInsets.all(_border),
@@ -245,26 +246,12 @@ class _SwitchTrack extends StatelessWidget {
         ],
       ),
     );
-    if (focused) {
-      track = DecoratedBox(
-        position: DecorationPosition.foreground,
-        decoration: BoxDecoration(
-          borderRadius: pill,
-          border: _focusRing(c.ring),
-        ),
-        child: track,
-      );
-    }
-    return track;
+    // The web package's `ring-2 ring-ring ring-offset-2`.
+    return PanelFocusRing(
+      visible: focused,
+      borderRadius: pill,
+      style: PanelFocusRingStyle.offset,
+      child: track,
+    );
   }
 }
-
-/// The web package's keyboard focus ring (`ring-2 ring-ring ring-offset-2`):
-/// 2pt of [color] standing 2pt clear of the control. The gap is left
-/// see-through rather than painted in the page colour.
-Border _focusRing(Color color) => Border.all(
-  color: color,
-  width: 2,
-  // Outside the edge and past the gap: from 2pt to 4pt out.
-  strokeAlign: 3,
-);
