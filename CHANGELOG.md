@@ -15,5 +15,14 @@ The first release of the port.
   with keyboard focus rings, hover and Enter/Space activation.
 - `PanelIcon` and `PanelIcons`, PanelUI's icon set on the same HugeIcons
   glyphs.
-- Components: see [docs/COMPONENTS.md](docs/COMPONENTS.md).
+- 43 of PanelUI's 141 components (see [docs/COMPONENTS.md](docs/COMPONENTS.md)):
+  - Actions: Button, ButtonGroup, Chip, Menu, ToggleButton.
+  - Forms: Checkbox, Field, Input, Label, NumberInput, OtpInput, RadioGroup,
+    Select, Slider and RangeSlider, Switch, Textarea, ThemeSelector.
+  - Feedback: Alert, Badge, EmptyState, Meter, Progress, Skeleton, Spinner.
+  - Overlays: BottomSheet, Dialog, Popover, Toast, Tooltip.
+  - Navigation: Breadcrumb, Pagination, Steps, Tabs.
+  - Layout: Accordion, Card, Collapsible, Item, ScrollFade, Separator,
+    Surface, Typography.
+  - Media: Avatar and AvatarGroup.
 - A gallery app in `example/`.

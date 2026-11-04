@@ -111,9 +111,21 @@ Build on Flutter's own layers rather than inventing one:
   `PopupRoute`) with the PanelUI scrim fade and entrance spring.
 - Toasts: an `OverlayEntry` in the root `Overlay`, managed by a small
   controller.
-- Tooltips, popovers, selects and menus: `OverlayPortal` with
-  `CompositedTransformTarget` / `CompositedTransformFollower`, dismissed by a
-  tap outside and by Escape.
+- Tooltips, popovers, selects and menus: `AnchoredOverlay` in
+  `lib/src/foundation/anchored_overlay.dart`, which places a panel against
+  its trigger with PanelUI's rules (flip, then clamp inside the safe area),
+  and handles outside taps, Escape, the back button and focus. Reuse it for
+  anything anchored.
+
+Three things that are easy to trip over:
+
+- A route whose motion is a spring can return a `SpringSimulation` from
+  `TransitionRoute.createSimulation` instead of using a duration and curve.
+- `OverlayPortalController.show()` cannot be called during a build; defer it
+  a frame.
+- While a popup built with `OverlayPortal.overlayChildLayoutBuilder` is open,
+  `tester.hasRunningAnimations` stays true, so close it before a test ends or
+  pump a fixed duration instead of `pumpAndSettle()`.
 
 ## Testing
 

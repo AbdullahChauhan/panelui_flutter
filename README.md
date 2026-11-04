@@ -14,21 +14,20 @@ springs.
 
 ## Status
 
-**23 of PanelUI's 141 components are ported**, along with the whole
+**43 of PanelUI's 141 components are ported**, along with the whole
 foundation they stand on. [docs/COMPONENTS.md](docs/COMPONENTS.md) lists every
 PanelUI component with its Flutter equivalent.
 
 | Ported | |
 | --- | --- |
 | Foundation | Colour tokens and radius scales generated from PanelUI's `theme.css`; Panel, Moon and Grass, each light and dark; type scale; shadows; PanelUI's springs; press feedback; icons |
-| Actions | Button, ButtonGroup |
-| Forms | Checkbox, Field, Input, Label, NumberInput, OtpInput, Switch, Textarea, ThemeSelector |
-| Feedback | Alert, Badge, EmptyState, Meter, Skeleton, Spinner |
-| Layout | Card, Direction (Flutter's own `Directionality`), ScrollFade, Separator, Surface, Typography |
-
-In progress: RadioGroup, Progress, Avatar, Chip, ToggleButton, Slider, Tabs,
-Accordion, Collapsible, Breadcrumb, Pagination, Steps, Item, Dialog,
-BottomSheet, Toast, Tooltip, Popover, Select and Menu.
+| Actions | Button, ButtonGroup, Chip, Menu, ToggleButton |
+| Forms | Checkbox, Field, Input, Label, NumberInput, OtpInput, RadioGroup, Select, Slider, Switch, Textarea, ThemeSelector |
+| Feedback | Alert, Badge, EmptyState, Meter, Progress, Skeleton, Spinner |
+| Overlays | BottomSheet, Dialog, Popover, Toast, Tooltip |
+| Navigation | Breadcrumb, Pagination, Steps, Tabs |
+| Layout | Accordion, Card, Collapsible, Direction (Flutter's own `Directionality`), Item, ScrollFade, Separator, Surface, Typography |
+| Media | Avatar |
 
 Charts (21), the AI components (12) and most media, layout and data components
 are still to come. [docs/PORTING.md](docs/PORTING.md) is the guide for porting
