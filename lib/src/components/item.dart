@@ -43,26 +43,6 @@ enum PanelItemMediaVariant {
   image,
 }
 
-/// What the parts of an item read from it.
-class _ItemScope extends InheritedWidget {
-  const _ItemScope({
-    required this.size,
-    required this.orientation,
-    required super.child,
-  });
-
-  final PanelItemSize size;
-  final Axis orientation;
-
-  static PanelItemSize sizeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_ItemScope>()?.size ??
-      PanelItemSize.md;
-
-  @override
-  bool updateShouldNotify(_ItemScope oldWidget) =>
-      size != oldWidget.size || orientation != oldWidget.orientation;
-}
-
 /// A row of content: media on one side, a title and a description in the
 /// middle, actions on the other side.
 ///
@@ -91,8 +71,9 @@ class _ItemScope extends InheritedWidget {
 /// and [footer] need. A vertical item fills the width it is given, so give
 /// it one.
 ///
-/// With [onPressed] the whole item is pressable; without it the item is a
-/// static row and is not announced as a button.
+/// With [onPressed] the whole item is pressable, and shrinks a little while
+/// pressed; without it the item is a static row and is not announced as a
+/// button.
 class PanelItem extends StatelessWidget {
   /// Creates an item.
   const PanelItem({
@@ -121,7 +102,8 @@ class PanelItem extends StatelessWidget {
   /// A muted line under the title.
   final Widget? description;
 
-  /// The trailing slot: buttons, a chevron, a switch, 6pt apart.
+  /// The trailing slot: buttons, a chevron, a switch, 6pt apart. An icon
+  /// here is drawn at 16pt in the muted colour unless it says otherwise.
   final List<Widget> actions;
 
   /// A full-width strip above the content, such as a [PanelItemHeader]. For
@@ -158,45 +140,17 @@ class PanelItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     final c = theme.colors;
-    final horizontal = orientation == Axis.horizontal;
+    // `p-4`, `p-3`, and `gap-2 p-2`; the gap is `gap-3` otherwise.
     final (double padding, double gap) = switch (size) {
       PanelItemSize.md => (16, 12),
       PanelItemSize.sm => (12, 12),
       PanelItemSize.xs => (8, 8),
     };
-    final titleSize = size == PanelItemSize.md
-        ? PanelTextSize.base
-        : PanelTextSize.sm;
-    final descriptionSize = size == PanelItemSize.md
-        ? PanelTextSize.sm
-        : PanelTextSize.xs;
-
-    final hasText = title != null || description != null;
-    final text = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 2,
-      children: [
-        if (title != null)
-          DefaultTextStyle(
-            style: theme.typography.style(
-              titleSize,
-              weight: FontWeight.w500,
-              color: c.foreground,
-            ),
-            child: title!,
-          ),
-        if (description != null)
-          DefaultTextStyle(
-            style: theme.typography.style(
-              descriptionSize,
-              color: c.mutedForeground,
-            ),
-            child: description!,
-          ),
-      ],
-    );
-
+    final media = this.media;
+    final text = title == null && description == null
+        ? null
+        : _ItemText(size: size, title: title, description: description);
+    // `gap-1.5`, with an icon in PanelUI's default 16pt grey.
     final actionRow = actions.isEmpty
         ? null
         : IconTheme(
@@ -208,55 +162,56 @@ class PanelItem extends StatelessWidget {
             ),
           );
 
-    final Widget body;
-    if (horizontal) {
-      body = Row(
-        spacing: gap,
-        children: [
-          ?media,
-          // The text takes the remaining width, so the actions stay pinned to
-          // the trailing edge.
-          Expanded(child: hasText ? text : const SizedBox.shrink()),
-          ?actionRow,
-        ],
-      );
-    } else {
-      body = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: gap,
-        children: [
-          ?header,
-          if (media != null)
-            Align(alignment: AlignmentDirectional.centerStart, child: media),
-          if (hasText) text,
-          if (actionRow != null)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: actionRow,
-            ),
-          ?footer,
-        ],
-      );
-    }
+    final Widget body = orientation == Axis.horizontal
+        ? Row(
+            spacing: gap,
+            children: [
+              ?media,
+              // The text takes the remaining width, so the actions stay
+              // pinned to the trailing edge.
+              if (text != null) Expanded(child: text),
+              ?actionRow,
+            ],
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: gap,
+            children: [
+              ?header,
+              if (media != null)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: media,
+                ),
+              ?text,
+              if (actionRow != null)
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: actionRow,
+                ),
+              ?footer,
+            ],
+          );
 
     final radius = BorderRadius.circular(theme.radii.xl);
-    Widget item = _ItemScope(
+    final item = _ItemScope(
       size: size,
-      orientation: orientation,
-      child: Container(
-        padding: EdgeInsets.all(padding),
-        decoration: BoxDecoration(
-          color: variant == PanelItemVariant.muted ? c.muted : null,
-          border: variant == PanelItemVariant.outline
-              ? Border.all(color: c.border)
-              : null,
-          borderRadius: radius,
+      child: Opacity(
+        opacity: enabled ? 1 : _disabledOpacity,
+        child: Container(
+          padding: EdgeInsets.all(padding),
+          decoration: BoxDecoration(
+            color: variant == PanelItemVariant.muted ? c.muted : null,
+            border: variant == PanelItemVariant.outline
+                ? Border.all(color: c.border)
+                : null,
+            borderRadius: radius,
+          ),
+          child: body,
         ),
-        child: body,
       ),
     );
-    item = Opacity(opacity: enabled ? 1 : 0.64, child: item);
 
     if (onPressed == null && onLongPress == null) {
       return Semantics(
@@ -281,6 +236,8 @@ class PanelItem extends StatelessWidget {
 ///
 /// Its size follows the item's [PanelItem.size] unless [size] says
 /// otherwise: an icon tile is 40, 32 or 24pt, an image frame 48, 40 or 32pt.
+/// An icon in a tile is drawn in the muted colour at 18, 16 or 12pt unless
+/// it says otherwise, the sizes PanelUI's own rows give theirs.
 class PanelItemMedia extends StatelessWidget {
   /// Creates a media slot.
   const PanelItemMedia({
@@ -309,10 +266,10 @@ class PanelItemMedia extends StatelessWidget {
       case PanelItemMediaVariant.plain:
         return child;
       case PanelItemMediaVariant.icon:
-        final extent = switch (resolved) {
-          PanelItemSize.md => 40.0,
-          PanelItemSize.sm => 32.0,
-          PanelItemSize.xs => 24.0,
+        final (double extent, double iconSize) = switch (resolved) {
+          PanelItemSize.md => (40, 18),
+          PanelItemSize.sm => (32, 16),
+          PanelItemSize.xs => (24, 12),
         };
         return Container(
           width: extent,
@@ -324,14 +281,7 @@ class PanelItemMedia extends StatelessWidget {
             borderRadius: radius,
           ),
           child: IconTheme(
-            data: IconThemeData(
-              color: c.mutedForeground,
-              size: switch (resolved) {
-                PanelItemSize.md => 18,
-                PanelItemSize.sm => 16,
-                PanelItemSize.xs => 12,
-              },
-            ),
+            data: IconThemeData(color: c.mutedForeground, size: iconSize),
             child: child,
           ),
         );
@@ -353,7 +303,8 @@ class PanelItemMedia extends StatelessWidget {
 }
 
 /// A full-width strip above a vertical [PanelItem]'s content: an eyebrow
-/// label, a badge row. Its children are spread to the two ends.
+/// label, a badge row. Its children are spread to the two ends, 8pt apart at
+/// the least.
 class PanelItemHeader extends StatelessWidget {
   /// Creates a header strip.
   const PanelItemHeader({super.key, required this.children});
@@ -372,7 +323,7 @@ class PanelItemHeader extends StatelessWidget {
 }
 
 /// A full-width strip below a vertical [PanelItem]'s content, such as a
-/// price or a row of buttons.
+/// price or a row of buttons, 8pt apart.
 class PanelItemFooter extends StatelessWidget {
   /// Creates a footer strip.
   const PanelItemFooter({super.key, required this.children});
@@ -413,23 +364,24 @@ class PanelItemGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final vertical = orientation == Axis.vertical;
-    final items = <Widget>[];
-    for (var i = 0; i < children.length; i++) {
-      if (i > 0 && separated) {
-        items.add(
+    final items = [
+      for (var i = 0; i < children.length; i++) ...[
+        if (i > 0 && separated)
           PanelSeparator(
             orientation: vertical ? Axis.horizontal : Axis.vertical,
           ),
-        );
-      }
-      items.add(children[i]);
-    }
+        children[i],
+      ],
+    ];
     final Widget run = vertical
         ? Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: items,
           )
+        // Stretched to the tallest item (`items-stretch`), which a row with
+        // no height of its own learns only by asking its items: hence the
+        // intrinsic pass.
         : IntrinsicHeight(
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -443,6 +395,70 @@ class PanelItemGroup extends StatelessWidget {
       explicitChildNodes: true,
       role: SemanticsRole.list,
       child: run,
+    );
+  }
+}
+
+/// A disabled item's opacity (`opacity-[0.64]`).
+const double _disabledOpacity = 0.64;
+
+/// What the parts of an item read from it.
+class _ItemScope extends InheritedWidget {
+  const _ItemScope({required this.size, required super.child});
+
+  final PanelItemSize size;
+
+  static PanelItemSize sizeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_ItemScope>()?.size ??
+      PanelItemSize.md;
+
+  @override
+  bool updateShouldNotify(_ItemScope oldWidget) => size != oldWidget.size;
+}
+
+/// An item's title and the muted line under it, 2pt apart (`gap-0.5`): a
+/// 16px title over a 14px line, or 14px over 12px in the smaller sizes.
+class _ItemText extends StatelessWidget {
+  const _ItemText({
+    required this.size,
+    required this.title,
+    required this.description,
+  });
+
+  final PanelItemSize size;
+  final Widget? title;
+  final Widget? description;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    final md = size == PanelItemSize.md;
+    final title = this.title;
+    final description = this.description;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 2,
+      children: [
+        if (title != null)
+          DefaultTextStyle(
+            style: theme.typography.style(
+              md ? PanelTextSize.base : PanelTextSize.sm,
+              weight: FontWeight.w500,
+              color: c.foreground,
+            ),
+            child: title,
+          ),
+        if (description != null)
+          DefaultTextStyle(
+            style: theme.typography.style(
+              md ? PanelTextSize.sm : PanelTextSize.xs,
+              color: c.mutedForeground,
+            ),
+            child: description,
+          ),
+      ],
     );
   }
 }

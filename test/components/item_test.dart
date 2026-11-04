@@ -162,11 +162,6 @@ void main() {
         ),
       ),
     );
-    final heights = tester
-        .widgetList<PanelItem>(find.byType(PanelItem))
-        .map((_) => 0)
-        .toList();
-    expect(heights.length, 2);
     final first = tester.getSize(find.byType(PanelItem).first);
     final second = tester.getSize(find.byType(PanelItem).last);
     expect(first.height, second.height);
