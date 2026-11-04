@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,7 @@ Widget _tabs({
   bool scrollable = false,
   bool keepMounted = false,
   bool swipeable = false,
+  bool animated = true,
   bool teamEnabled = true,
   List<String> extra = const [],
 }) {
@@ -25,6 +27,7 @@ Widget _tabs({
     size: size,
     keepMounted: keepMounted,
     swipeable: swipeable,
+    animated: animated,
     children: [
       PanelTabsList(
         scrollable: scrollable,
@@ -342,6 +345,45 @@ void main() {
     expect(scrollable.position.pixels, 0);
   });
 
+  testWidgets('the scroller still travels when the tab set does not move', (
+    tester,
+  ) async {
+    final extra = [for (var i = 0; i < 8; i++) 'Section $i'];
+    Widget build(String value) => wrap(
+      SizedBox(
+        width: 320,
+        child: _tabs(
+          value: value,
+          variant: PanelTabsVariant.underline,
+          scrollable: true,
+          animated: false,
+          extra: extra,
+        ),
+      ),
+    );
+    await tester.pumpWidget(build('account'));
+    await tester.pumpAndSettle();
+    final position = tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byType(PanelTabsList),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+    expect(position.pixels, 0);
+
+    // `animated: false` stills the indicator, the strip and the reveal, as
+    // in PanelUI; bringing the selection into view is still a scroll.
+    await tester.pumpWidget(build('Section 7'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(position.pixels, greaterThan(0));
+    expect(position.pixels, lessThan(position.maxScrollExtent));
+    await tester.pumpAndSettle();
+    expect(position.pixels, moreOrLessEquals(position.maxScrollExtent));
+  });
+
   testWidgets('labels are centred in their triggers in every variant', (
     tester,
   ) async {
@@ -597,6 +639,174 @@ void main() {
     );
     expect(fade.opacity.value, greaterThan(0));
     expect(fade.opacity.value, lessThan(1));
+  });
+
+  testWidgets('a small trigger takes presses in the track around it', (
+    tester,
+  ) async {
+    for (final (size, reaches) in [
+      (PanelTabsSize.xs, true),
+      (PanelTabsSize.sm, true),
+      (PanelTabsSize.md, false),
+    ]) {
+      final values = <String>[];
+      await tester.pumpWidget(wrap(_tabs(size: size, onChanged: values.add)));
+      await tester.pumpAndSettle();
+      // 2pt above the trigger, inside the segmented track's 4pt padding.
+      final password = tester.getRect(_trigger('Password'));
+      await tester.tapAt(Offset(password.center.dx, password.top - 2));
+      await tester.pumpAndSettle();
+      expect(values, reaches ? ['password'] : isEmpty, reason: '$size');
+    }
+  });
+
+  testWidgets('a vertical drag on the strip is left to whatever scrolls', (
+    tester,
+  ) async {
+    final values = <String>[];
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(
+          width: 360,
+          height: 300,
+          child: _tabs(swipeable: true, onChanged: values.add),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final before = tester.getRect(find.text('Account panel'));
+
+    // Up and down past 8pt before 12pt sideways: the strip lets it go, and
+    // the sideways travel that follows does not take it back.
+    final gesture = await tester.startGesture(before.center);
+    await gesture.moveBy(const Offset(-4, 10));
+    await tester.pump();
+    await gesture.moveBy(const Offset(-120, 0));
+    await tester.pump();
+    expect(tester.getRect(find.text('Account panel')), before);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(values, isEmpty);
+    expect(tester.getRect(find.text('Account panel')), before);
+  });
+
+  testWidgets('a vertical drag on the strip scrolls the page around it', (
+    tester,
+  ) async {
+    final values = <String>[];
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(
+          width: 360,
+          height: 400,
+          child: ListView(
+            controller: scroll,
+            children: [
+              SizedBox(
+                height: 300,
+                child: _tabs(swipeable: true, onChanged: values.add),
+              ),
+              const SizedBox(height: 600),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // A little sideways, mostly down: the page takes it.
+    await tester.drag(find.text('Account panel'), const Offset(-10, -120));
+    await tester.pumpAndSettle();
+    expect(scroll.offset, greaterThan(0));
+    expect(values, isEmpty);
+  });
+
+  testWidgets('a drag follows the finger from where it touched down', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(SizedBox(width: 360, height: 300, child: _tabs(swipeable: true))),
+    );
+    await tester.pumpAndSettle();
+    final before = tester.getRect(find.text('Account panel'));
+    final gesture = await tester.startGesture(before.center);
+    await gesture.moveBy(const Offset(-20, 0));
+    await tester.pump();
+    // Past the 12pt threshold, the strip has caught up with the finger.
+    expect(
+      tester.getRect(find.text('Account panel')).left,
+      moreOrLessEquals(before.left - 20),
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('an icon keeps the muted colour, selected or not', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(_tabs()));
+    await tester.pumpAndSettle();
+    final muted = PanelThemeData.panelLight.colors.mutedForeground;
+    for (final icon in [PanelIcons.lock, PanelIcons.globe]) {
+      final context = tester.element(
+        find.byWidgetPredicate((w) => w is PanelIcon && w.icon == icon),
+      );
+      expect(IconTheme.of(context).color, muted);
+    }
+  });
+
+  testWidgets('a mouse over an underline tab lights a plate behind it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        SizedBox(width: 360, child: _tabs(variant: PanelTabsVariant.underline)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    Color? plate() =>
+        (tester
+                    .widget<AnimatedContainer>(
+                      find.descendant(
+                        of: _trigger('Password'),
+                        matching: find.byType(AnimatedContainer),
+                      ),
+                    )
+                    .decoration!
+                as BoxDecoration)
+            .color;
+    expect(plate()!.a, 0);
+
+    // Hover shows where highlights do: with a mouse, not after a touch.
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(_trigger('Password')));
+    await tester.pumpAndSettle();
+    final muted = PanelThemeData.panelLight.colors.muted;
+    expect(plate()!.a, moreOrLessEquals(muted.a * 0.7));
+    // The label lifts to the foreground too.
+    expect(
+      tester
+          .widget<DefaultTextStyle>(
+            find
+                .ancestor(
+                  of: find.text('Password'),
+                  matching: find.byType(DefaultTextStyle),
+                )
+                .first,
+          )
+          .style
+          .color,
+      PanelThemeData.panelLight.colors.foreground,
+    );
   });
 
   testWidgets('parts outside a PanelTabs say so', (tester) async {
