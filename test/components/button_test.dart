@@ -66,20 +66,19 @@ void main() {
       of: find.byType(PanelButton),
       matching: find.byType(Transform),
     );
-    expect(scale, findsNothing);
+    double current() =>
+        tester.widget<Transform>(scale.first).transform.entry(0, 0);
+    expect(current(), 1);
     final gesture = await tester.startGesture(
       tester.getCenter(find.text('Press')),
     );
     // The first frame starts the ticker; the second advances it.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(
-      tester.widget<Transform>(scale).transform.entry(0, 0),
-      closeTo(0.97, 0.001),
-    );
+    expect(current(), closeTo(0.97, 0.001));
     await gesture.up();
     await tester.pumpAndSettle();
-    expect(scale, findsNothing);
+    expect(current(), 1);
   });
 
   testWidgets('activates from the keyboard', (tester) async {

@@ -303,13 +303,17 @@ class _PanelPressableState extends State<PanelPressable>
       builder: (context, child) {
         final t = _press.value;
         var result = child!;
-        if (widget.pressScale != 1 && t != 0) {
+        // Both wrappers stay in the tree at rest: inserting them only while a
+        // press animates would rebuild the content beneath them, and lose its
+        // state, on every press. At rest they are an identity transform and
+        // full opacity, which paint without a layer.
+        if (widget.pressScale != 1) {
           result = Transform.scale(
             scale: 1 + t * (widget.pressScale - 1),
             child: result,
           );
         }
-        if (widget.pressOpacity != 1 && t != 0) {
+        if (widget.pressOpacity != 1) {
           result = Opacity(
             opacity: (1 + t * (widget.pressOpacity - 1)).clamp(0.0, 1.0),
             child: result,

@@ -39,18 +39,30 @@ void main() {
       // Past the press timeout, when both would otherwise report a press.
       await tester.pump(const Duration(milliseconds: 150));
       await tester.pump(const Duration(milliseconds: 100));
-      final innerScale = tester
-          .widgetList<Transform>(scaleOf(inner))
-          .map((t) => t.transform.entry(0, 0));
-      expect(innerScale, contains(closeTo(0.97, 0.001)));
-      // The outer one holds still: its only transform is the inner one's.
-      expect(
-        tester.widgetList(scaleOf(outer)).length,
-        tester.widgetList(scaleOf(inner)).length,
-      );
+      double scale(Key key) =>
+          tester.widget<Transform>(scaleOf(key).first).transform.entry(0, 0);
+      expect(scale(inner), closeTo(0.97, 0.001));
+      // The outer one holds still.
+      expect(scale(outer), 1);
       await gesture.up();
       await tester.pumpAndSettle();
       expect((innerTaps, outerTaps), (1, 0));
+    });
+
+    testWidgets('a press keeps the content and its state', (tester) async {
+      await tester.pumpWidget(
+        wrap(PanelPressable(onPressed: () {}, child: const _Counter())),
+      );
+      final before = tester.state(find.byType(_Counter));
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(_Counter)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.state(find.byType(_Counter)), same(before));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.state(find.byType(_Counter)), same(before));
     });
 
     testWidgets('rings only the control that holds focus', (tester) async {
@@ -205,4 +217,17 @@ void main() {
       closeTo(0.25, 1e-3),
     );
   });
+}
+
+/// A stateful child, to tell whether its state survives.
+class _Counter extends StatefulWidget {
+  const _Counter();
+
+  @override
+  State<_Counter> createState() => _CounterState();
+}
+
+class _CounterState extends State<_Counter> {
+  @override
+  Widget build(BuildContext context) => const SizedBox.square(dimension: 40);
 }
