@@ -1,0 +1,34 @@
+name: panelui_flutter_example
+description: "Gallery of every component in panelui_flutter, in each theme family."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  panelui_flutter:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  # Inter, the face PanelUI's documentation site is set in (SIL OFL 1.1,
+  # see fonts/OFL.txt). The library itself uses the platform font.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: fonts/Inter-400.ttf
+          weight: 400
+        - asset: fonts/Inter-500.ttf
+          weight: 500
+        - asset: fonts/Inter-600.ttf
+          weight: 600
+        - asset: fonts/Inter-700.ttf
+          weight: 700

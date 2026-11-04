@@ -1,0 +1,21 @@
+name: panelui_flutter
+description: "A Flutter port of PanelUI: semantic design tokens, three theme families in light and dark, and accessible, animated UI components."
+version: 0.1.0
+# Kept unpublishable until the package name and ownership are settled.
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  hugeicons: ^4.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
