@@ -16,8 +16,8 @@ enum PanelMenuItemVariant {
   /// An ordinary row. PanelUI's `default`.
   plain,
 
-  /// A row for an action that removes something: red text, a red icon and a
-  /// red-tinted press, so it is not read past at a glance.
+  /// A row for an action that removes something: red text and a red-tinted
+  /// press, so it is not read past at a glance.
   destructive,
 }
 
@@ -36,6 +36,20 @@ const double _indicatorSize = 18;
 /// The start padding of a row with no glyph that still lines up with the
 /// rows that have one: the row's own 10, the column and the 10 gap after it.
 const double _insetStart = 38;
+
+/// The menu's padding, PanelUI's `p-1.5`: the row gutter, so a pressed
+/// row's fill runs to the panel's inner edge and reads as part of it.
+const double _panelPadding = 6;
+
+/// The gap between rows on the panel itself, PanelUI's `gap-0.5`.
+const double _rowGap = 2;
+
+/// The gap between rows inside the panel's scroller, which takes the
+/// popover's `gap-1.5` in PanelUI rather than the menu's own.
+const double _scrolledRowGap = 6;
+
+/// How faded a disabled row is, PanelUI's `opacity-[0.45]`.
+const double _disabledOpacity = 0.45;
 
 /// How long a row takes to light up under a finger, and to let go again.
 const Duration _pressIn = Duration(milliseconds: 90);
@@ -79,11 +93,13 @@ const double _pressScale = 0.98;
 ///
 /// The panel is a [PanelPopover] underneath, so it is measured, flipped and
 /// kept on screen the same way, and takes the same placement and size
-/// options. Its surface is the `overlay` token, drawn as a layer behind the
-/// rows that [background] can replace.
+/// options; [presentation] moves the same rows into a bottom sheet. Its
+/// surface is the `overlay` token, drawn as a layer behind the rows that
+/// [background] can replace.
 ///
 /// A row runs its action and closes the menu. Arrow keys, Home and End move
 /// between rows, Enter or Space runs one, and Escape or Tab closes the menu.
+/// A row under the pointer or the keyboard is lit as in PanelUI's web menu.
 /// Submenus ([PanelMenuSub]) expand in place rather than flying out sideways,
 /// which a finger cannot follow.
 class PanelMenu extends StatelessWidget {
@@ -96,6 +112,7 @@ class PanelMenu extends StatelessWidget {
     this.isOpen,
     this.onOpenChange,
     this.initiallyOpen = false,
+    this.presentation = PanelPopoverPresentation.popover,
     this.placement = PanelPopoverPlacement.bottom,
     this.align = PanelPopoverAlign.center,
     this.offset = 8,
@@ -109,7 +126,9 @@ class PanelMenu extends StatelessWidget {
     this.haptics = false,
     this.dismissible = true,
     this.scrim = false,
+    this.blur = false,
     this.semanticLabel,
+    this.closeLabel = 'Close',
   });
 
   /// Builds the trigger, given the controller that opens the menu.
@@ -132,6 +151,11 @@ class PanelMenu extends StatelessWidget {
   /// Whether an uncontrolled menu starts open.
   final bool initiallyOpen;
 
+  /// A panel anchored to the trigger (the default), or the same rows in a
+  /// bottom sheet, which is better on a small screen than a panel floating
+  /// over the thing being acted on.
+  final PanelPopoverPresentation presentation;
+
   /// The preferred side of the trigger.
   final PanelPopoverPlacement placement;
 
@@ -144,7 +168,8 @@ class PanelMenu extends StatelessWidget {
   /// A nudge along the alignment axis.
   final double alignOffset;
 
-  /// A fixed width. Null sizes the menu to its widest row.
+  /// A fixed width. Null sizes the menu to its widest row (centred, in a
+  /// sheet).
   final double? width;
 
   /// Make the menu exactly as wide as the trigger.
@@ -164,6 +189,7 @@ class PanelMenu extends StatelessWidget {
 
   /// What the panel is made of, drawn behind the rows and outside the
   /// scroller (PanelUI's `Menu.Background`). Defaults to the `overlay` token.
+  /// A sheet is its own surface, so it does not draw one.
   final Widget? background;
 
   /// Ticks the haptic engine as a row is chosen.
@@ -175,17 +201,26 @@ class PanelMenu extends StatelessWidget {
   /// Dims the screen behind the menu.
   final bool scrim;
 
+  /// Frosts the screen behind the menu instead of dimming it.
+  final bool blur;
+
   /// Announced as the menu's name when it opens.
   final String? semanticLabel;
 
+  /// What screen readers call the way out of the menu: the layer behind it,
+  /// or a sheet's close button.
+  final String closeLabel;
+
   @override
   Widget build(BuildContext context) {
+    final sheet = presentation == PanelPopoverPresentation.bottomSheet;
     return PanelPopover(
       builder: builder,
       controller: controller,
       isOpen: isOpen,
       onOpenChange: onOpenChange,
       initiallyOpen: initiallyOpen,
+      presentation: presentation,
       placement: placement,
       align: align,
       offset: offset,
@@ -196,22 +231,39 @@ class PanelMenu extends StatelessWidget {
       maxHeight: maxHeight,
       dismissible: dismissible,
       scrim: scrim,
+      blur: blur,
       semanticLabel: semanticLabel,
+      closeLabel: closeLabel,
+      // The menu draws its own surface: its corners are rounder than a
+      // popover's, and its shadow has to fall outside the clip that keeps
+      // the background inside them.
       unstyled: true,
       children: [
-        _MenuPanel(
-          scrollable: scrollable,
-          background: background,
-          haptics: haptics,
-          children: children,
-        ),
+        if (sheet)
+          // In a sheet the rows sit on the sheet's own surface, `gap-0.5`
+          // apart inside the menu's `p-1.5`, as PanelUI lays them out there.
+          Padding(
+            padding: const EdgeInsets.all(_panelPadding),
+            child: _MenuRows(
+              gap: _rowGap,
+              haptics: haptics,
+              children: children,
+            ),
+          )
+        else
+          _MenuPanel(
+            scrollable: scrollable,
+            background: background,
+            haptics: haptics,
+            children: children,
+          ),
       ],
     );
   }
 }
 
-/// The menu's own surface: a rounded `overlay` layer behind a column of rows,
-/// 6pt in from its edge so a pressed row's fill reads as part of the panel.
+/// The anchored menu's surface: a rounded `overlay` layer behind a column of
+/// rows, with PanelUI's `shadow-lg` falling outside it.
 class _MenuPanel extends StatelessWidget {
   const _MenuPanel({
     required this.scrollable,
@@ -229,17 +281,7 @@ class _MenuPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     final radius = BorderRadius.circular(theme.radii.xxxl);
-
-    // The rows are 6pt apart inside the scroller and 2pt apart without one,
-    // which is how PanelUI's menu lays them out (the scroller's content view
-    // carries the popover's `gap-1.5`, the bare panel the menu's `gap-0.5`).
-    Widget rows = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: scrollable ? 6 : 2,
-      children: children,
-    );
-    rows = ScrollConfiguration(
+    final rows = ScrollConfiguration(
       behavior: ScrollConfiguration.of(
         context,
       ).copyWith(scrollbars: false, overscroll: false),
@@ -247,21 +289,13 @@ class _MenuPanel extends StatelessWidget {
         physics: scrollable
             ? const ClampingScrollPhysics()
             : const NeverScrollableScrollPhysics(),
-        child: rows,
+        child: _MenuRows(
+          gap: scrollable ? _scrolledRowGap : _rowGap,
+          haptics: haptics,
+          children: children,
+        ),
       ),
     );
-    rows = PopupListNavigation(
-      onTab: () => PanelPopover.maybeOf(context)?.close(),
-      child: rows,
-    );
-    if (children.isNotEmpty) {
-      rows = Semantics(
-        role: SemanticsRole.menu,
-        explicitChildNodes: true,
-        child: rows,
-      );
-    }
-    rows = _MenuScope(haptics: haptics, child: rows);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -279,7 +313,7 @@ class _MenuPanel extends StatelessWidget {
                 ),
               ),
             ),
-            Padding(padding: const EdgeInsets.all(6), child: rows),
+            Padding(padding: const EdgeInsets.all(_panelPadding), child: rows),
           ],
         ),
       ),
@@ -287,16 +321,62 @@ class _MenuPanel extends StatelessWidget {
   }
 }
 
-class _MenuScope extends InheritedWidget {
-  const _MenuScope({required this.haptics, required super.child});
+/// The rows of a menu, wherever it is presented: a column [gap] apart that
+/// is announced as a menu and moved through with the arrow keys.
+class _MenuRows extends StatelessWidget {
+  const _MenuRows({
+    required this.gap,
+    required this.haptics,
+    required this.children,
+  });
 
+  final double gap;
   final bool haptics;
-
-  static bool hapticsOf(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<_MenuScope>()?.haptics ?? false;
+  final List<Widget> children;
 
   @override
-  bool updateShouldNotify(_MenuScope oldWidget) => haptics != oldWidget.haptics;
+  Widget build(BuildContext context) {
+    Widget rows = PopupListNavigation(
+      onTab: () => PanelPopover.maybeOf(context)?.close(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: gap,
+        children: children,
+      ),
+    );
+    if (children.isNotEmpty) {
+      rows = Semantics(
+        role: SemanticsRole.menu,
+        explicitChildNodes: true,
+        child: rows,
+      );
+    }
+    return _MenuScope(haptics: haptics, gap: gap, child: rows);
+  }
+}
+
+/// What a row needs from the menu around it.
+class _MenuScope extends InheritedWidget {
+  const _MenuScope({
+    required this.haptics,
+    required this.gap,
+    required super.child,
+  });
+
+  /// Whether choosing a row ticks the haptic engine.
+  final bool haptics;
+
+  /// The gap between the menu's rows, which a submenu also leaves between
+  /// its trigger and the rows it reveals.
+  final double gap;
+
+  static _MenuScope? _of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_MenuScope>();
+
+  @override
+  bool updateShouldNotify(_MenuScope oldWidget) =>
+      haptics != oldWidget.haptics || gap != oldWidget.gap;
 }
 
 /// One row of a menu: an action.
@@ -327,7 +407,7 @@ class PanelMenuItem extends StatelessWidget {
   final VoidCallback? onSelected;
 
   /// A glyph in the leading column, such as a [PanelIcon]. It is drawn at 16
-  /// in the muted colour (red on a destructive row).
+  /// in the muted colour, and takes the label's colour while the row is lit.
   final Widget? leading;
 
   /// A second, muted line under the label, for a row whose effect needs a
@@ -365,7 +445,7 @@ class PanelMenuItem extends StatelessWidget {
       description: description,
       shortcut: shortcut,
       trailing: trailing,
-      destructive: variant == PanelMenuItemVariant.destructive,
+      variant: variant,
       closeOnSelect: closeOnSelect,
       role: SemanticsRole.menuItem,
       semanticLabel: semanticLabel,
@@ -428,32 +508,19 @@ class PanelMenuCheckboxItem extends StatelessWidget {
       onPressed: onChanged == null ? null : () => onChanged(!value),
       // An empty column rather than none, so the label does not step
       // sideways as the tick comes and goes.
-      leading: value ? const _MenuCheck() : const SizedBox.shrink(),
+      leading: value
+          ? const _MenuIndicator(PanelMenuRadioIndicator.check)
+          : const SizedBox.shrink(),
       description: description,
       shortcut: shortcut,
       trailing: trailing,
-      destructive: variant == PanelMenuItemVariant.destructive,
+      variant: variant,
       closeOnSelect: closeOnSelect,
       role: SemanticsRole.menuItemCheckbox,
       checked: value,
       semanticLabel: semanticLabel,
     );
   }
-}
-
-class _RadioScope<T> extends InheritedWidget {
-  const _RadioScope({
-    required this.value,
-    required this.onChanged,
-    required super.child,
-  });
-
-  final T? value;
-  final ValueChanged<T>? onChanged;
-
-  @override
-  bool updateShouldNotify(_RadioScope<T> oldWidget) =>
-      value != oldWidget.value || onChanged != oldWidget.onChanged;
 }
 
 /// A run of [PanelMenuRadioItem]s of which one is chosen.
@@ -472,7 +539,8 @@ class PanelMenuRadioGroup<T> extends StatelessWidget {
   /// Called with the value of the item chosen. Null disables the group.
   final ValueChanged<T>? onChanged;
 
-  /// The items.
+  /// The items. PanelUI's group is a plain view, so they sit with no gap
+  /// between them, whatever the menu's own.
   final List<Widget> children;
 
   @override
@@ -493,6 +561,21 @@ class PanelMenuRadioGroup<T> extends StatelessWidget {
   }
 }
 
+class _RadioScope<T> extends InheritedWidget {
+  const _RadioScope({
+    required this.value,
+    required this.onChanged,
+    required super.child,
+  });
+
+  final T? value;
+  final ValueChanged<T>? onChanged;
+
+  @override
+  bool updateShouldNotify(_RadioScope<T> oldWidget) =>
+      value != oldWidget.value || onChanged != oldWidget.onChanged;
+}
+
 /// One option inside a [PanelMenuRadioGroup], marked while it is the group's
 /// value. It closes the menu when chosen, unless [closeOnSelect] is false.
 class PanelMenuRadioItem<T> extends StatelessWidget {
@@ -506,6 +589,7 @@ class PanelMenuRadioItem<T> extends StatelessWidget {
     this.description,
     this.shortcut,
     this.trailing,
+    this.variant = PanelMenuItemVariant.plain,
     this.closeOnSelect = true,
     this.semanticLabel,
   });
@@ -531,6 +615,9 @@ class PanelMenuRadioItem<T> extends StatelessWidget {
   /// Content pinned to the end of the row.
   final Widget? trailing;
 
+  /// Plain or destructive.
+  final PanelMenuItemVariant variant;
+
   /// Close the menu once the row has been chosen.
   final bool closeOnSelect;
 
@@ -551,15 +638,11 @@ class PanelMenuRadioItem<T> extends StatelessWidget {
       onPressed: enabled && onChanged != null ? () => onChanged(value) : null,
       // Held open when unmarked, so the options stay in one column as the
       // choice moves between them.
-      leading: selected
-          ? (indicator == PanelMenuRadioIndicator.dot
-                ? const _MenuDot()
-                : const _MenuCheck())
-          : const SizedBox.shrink(),
+      leading: selected ? _MenuIndicator(indicator) : const SizedBox.shrink(),
       description: description,
       shortcut: shortcut,
       trailing: trailing,
-      destructive: false,
+      variant: variant,
       closeOnSelect: closeOnSelect,
       role: SemanticsRole.menuItemRadio,
       checked: selected,
@@ -632,7 +715,7 @@ class _PanelMenuSubState extends State<PanelMenuSub>
 
   bool get _open => widget.isOpen ?? _internalOpen;
 
-  // PanelUI turns the chevron over 180ms and opens the rows over 200ms.
+  /// PanelUI turns the chevron over 180ms and opens the rows over 200ms.
   late final AnimationController _chevron = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 180),
@@ -647,7 +730,7 @@ class _PanelMenuSubState extends State<PanelMenuSub>
   @override
   void didUpdateWidget(PanelMenuSub oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _animate();
+    if (widget.isOpen != oldWidget.isOpen) _animate();
   }
 
   @override
@@ -708,63 +791,7 @@ class _PanelMenuSubState extends State<PanelMenuSub>
 
   @override
   Widget build(BuildContext context) {
-    final theme = PanelTheme.of(context);
-    final rtl = Directionality.of(context) == TextDirection.rtl;
     final open = _open;
-
-    final chevron = AnimatedBuilder(
-      animation: _chevron,
-      builder: (context, child) => Transform.rotate(
-        // A quarter turn takes the chevron from along the line of text to
-        // pointing down into the rows; under RTL it starts the other way.
-        angle: _chevron.value * (rtl ? -1 : 1) * 1.5707963267948966,
-        child: child,
-      ),
-      child: PanelIcon(
-        PanelIcons.chevronRight,
-        size: 16,
-        color: theme.colors.mutedForeground,
-      ),
-    );
-
-    final rows = AnimatedBuilder(
-      animation: _expand,
-      builder: (context, child) {
-        final t = _expand.value;
-        if (t <= 0) return const SizedBox.shrink();
-        return ClipRect(
-          child: Align(
-            alignment: AlignmentDirectional.topStart,
-            heightFactor: t,
-            child: Opacity(opacity: t.clamp(0.0, 1.0), child: child),
-          ),
-        );
-      },
-      child: ExcludeFocus(
-        excluding: !open,
-        child: IgnorePointer(
-          ignoring: !open,
-          child: Padding(
-            padding: const EdgeInsetsDirectional.only(start: 16, top: 6),
-            child: Container(
-              padding: const EdgeInsetsDirectional.only(start: 4),
-              decoration: BoxDecoration(
-                border: BorderDirectional(
-                  start: BorderSide(color: theme.colors.border),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: 2,
-                children: widget.children,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -781,15 +808,106 @@ class _PanelMenuSubState extends State<PanelMenuSub>
             leading: widget.leading,
             reserveLeading: widget.inset,
             description: widget.description,
-            trailing: chevron,
-            destructive: false,
+            trailing: _SubChevron(turn: _chevron),
+            variant: PanelMenuItemVariant.plain,
             closeOnSelect: false,
             role: SemanticsRole.menuItem,
             expanded: open,
           ),
-          rows,
+          // PanelUI's trigger row and its rows are separate items in the
+          // menu's column, so the menu's gap falls between them, and again
+          // after them, even while the rows are folded away to nothing.
+          SizedBox(height: _MenuScope._of(context)?.gap ?? _scrolledRowGap),
+          _SubRows(expand: _expand, open: open, children: widget.children),
         ],
       ),
+    );
+  }
+}
+
+/// A submenu's chevron: along the line of text while closed, turned a
+/// quarter to point down into the rows once open. Under right-to-left the
+/// glyph mirrors itself and the turn runs the other way, so the two compose.
+class _SubChevron extends StatelessWidget {
+  const _SubChevron({required this.turn});
+
+  /// From 0, closed, to 1, open.
+  final Animation<double> turn;
+
+  @override
+  Widget build(BuildContext context) {
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    return RotationTransition(
+      turns: turn.drive(Tween<double>(begin: 0, end: rtl ? -0.25 : 0.25)),
+      child: PanelIcon(
+        PanelIcons.chevronRight,
+        size: 16,
+        strokeWidth: 2,
+        color: PanelTheme.of(context).colors.mutedForeground,
+      ),
+    );
+  }
+}
+
+/// The rows a submenu reveals, opening in place: indented and ruled along
+/// their leading edge (PanelUI's `ms-4 gap-0.5 border-s border-border
+/// ps-1`), so they read as belonging to the row above.
+///
+/// The height follows the rows' natural height rather than a layout pass of
+/// its own, so the menu settles at the size the rows actually are.
+class _SubRows extends StatelessWidget {
+  const _SubRows({
+    required this.expand,
+    required this.open,
+    required this.children,
+  });
+
+  final Animation<double> expand;
+  final bool open;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = ExcludeFocus(
+      excluding: !open,
+      child: IgnorePointer(
+        ignoring: !open,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.only(start: 16),
+          // A container adds its border's width to the padding, as React
+          // Native puts padding inside a border.
+          child: Container(
+            padding: const EdgeInsetsDirectional.only(start: 4),
+            decoration: BoxDecoration(
+              border: BorderDirectional(
+                start: BorderSide(color: PanelTheme.of(context).colors.border),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: _rowGap,
+              children: children,
+            ),
+          ),
+        ),
+      ),
+    );
+    return AnimatedBuilder(
+      animation: expand,
+      child: rows,
+      builder: (context, child) {
+        final t = expand.value;
+        // Folded away, the rows are not built at all.
+        if (t <= 0) return const SizedBox.shrink();
+        return ClipRect(
+          child: Align(
+            alignment: AlignmentDirectional.topStart,
+            heightFactor: t,
+            child: Opacity(opacity: t.clamp(0.0, 1.0), child: child),
+          ),
+        );
+      },
     );
   }
 }
@@ -827,6 +945,7 @@ class PanelMenuLabel extends StatelessWidget {
                 weight: FontWeight.w500,
                 color: theme.colors.mutedForeground,
               )
+              // `tracking-wide`: 0.025em.
               .copyWith(letterSpacing: 0.3),
         ),
       ),
@@ -851,33 +970,34 @@ class PanelMenuSeparator extends StatelessWidget {
   }
 }
 
-class _MenuCheck extends StatelessWidget {
-  const _MenuCheck();
+/// The tick of a checked row, or the tick or dot of a chosen radio row:
+/// PanelUI's `CheckIcon` at 16, or its filled `CircleIcon` at 8, both at a
+/// 2pt stroke in the `popover-foreground` token.
+class _MenuIndicator extends StatelessWidget {
+  const _MenuIndicator(this.kind);
 
-  @override
-  Widget build(BuildContext context) => PanelIcon(
-    PanelIcons.check,
-    size: 16,
-    strokeWidth: 2,
-    color: PanelTheme.of(context).colors.popoverForeground,
-  );
-}
-
-class _MenuDot extends StatelessWidget {
-  const _MenuDot();
+  final PanelMenuRadioIndicator kind;
 
   @override
   Widget build(BuildContext context) {
-    // The size of PanelUI's filled CircleIcon at 8: its r=10 circle in a 24
-    // box, plus the stroke, is a 7⅓pt dot.
-    return Container(
-      width: 22 / 3,
-      height: 22 / 3,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: PanelTheme.of(context).colors.popoverForeground,
+    final color = PanelTheme.of(context).colors.popoverForeground;
+    return switch (kind) {
+      PanelMenuRadioIndicator.check => PanelIcon(
+        PanelIcons.check,
+        size: 16,
+        strokeWidth: 2,
+        color: color,
       ),
-    );
+      // A filled circle rather than a round box, so the dot and the tick are
+      // drawn the same way and read as the same size.
+      PanelMenuRadioIndicator.dot => PanelIcon(
+        PanelIcons.circle,
+        size: 8,
+        strokeWidth: 2,
+        filled: true,
+        color: color,
+      ),
+    };
   }
 }
 
@@ -886,7 +1006,7 @@ class _MenuRow extends StatelessWidget {
   const _MenuRow({
     required this.label,
     required this.onPressed,
-    required this.destructive,
+    required this.variant,
     required this.closeOnSelect,
     required this.role,
     this.leading,
@@ -903,7 +1023,7 @@ class _MenuRow extends StatelessWidget {
 
   final Widget label;
   final VoidCallback? onPressed;
-  final bool destructive;
+  final PanelMenuItemVariant variant;
   final bool closeOnSelect;
   final SemanticsRole role;
   final Widget? leading;
@@ -918,7 +1038,9 @@ class _MenuRow extends StatelessWidget {
   final String? semanticLabel;
 
   void _activate(BuildContext context) {
-    if (_MenuScope.hapticsOf(context)) HapticFeedback.selectionClick();
+    if (_MenuScope._of(context)?.haptics ?? false) {
+      HapticFeedback.selectionClick();
+    }
     onPressed?.call();
     if (closeOnSelect) PanelPopover.maybeOf(context)?.close();
   }
@@ -927,15 +1049,83 @@ class _MenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     final c = theme.colors;
+    final destructive = variant == PanelMenuItemVariant.destructive;
+    final radius = BorderRadius.circular(theme.radii.xxl);
     final enabled = onPressed != null;
-    final labelColor = destructive ? c.destructive : c.overlayForeground;
-    final iconColor = destructive ? c.destructive : c.mutedForeground;
-    final muted = theme.typography.style(
-      PanelTextSize.sm,
-      color: c.mutedForeground,
+    return Opacity(
+      opacity: enabled ? 1 : _disabledOpacity,
+      child: PanelPressable(
+        focusNode: focusNode,
+        onPressed: enabled ? () => _activate(context) : null,
+        pressScale: 1,
+        semanticRole: role,
+        checked: checked,
+        inMutuallyExclusiveGroup: inMutuallyExclusiveGroup,
+        expanded: expanded,
+        semanticLabel: semanticLabel,
+        // No ring: as in PanelUI's web menu, a focused row is lit instead.
+        builder: (context, state) {
+          final lit = state.hovered || state.focused;
+          return _MenuRowFill(
+            pressed: state.pressed,
+            lit: lit,
+            // A finger's press fades in PanelUI's native fill; the pointer
+            // and keyboard highlight is its web package's.
+            pressFill: destructive ? c.destructiveSubtle : c.accent,
+            litFill: destructive
+                ? c.destructive.withValues(alpha: c.destructive.a * 0.1)
+                : c.accent,
+            radius: radius,
+            child: _MenuRowContent(
+              label: label,
+              leading: leading,
+              reserveLeading: reserveLeading,
+              description: description,
+              shortcut: shortcut,
+              trailing: trailing,
+              labelColor: destructive
+                  ? c.destructive
+                  : (lit ? c.accentForeground : c.overlayForeground),
+              lit: lit,
+            ),
+          );
+        },
+      ),
     );
+  }
+}
 
-    final content = Padding(
+/// What a row shows: PanelUI's `px-2.5 py-2.5 gap-2.5` row of a leading
+/// glyph, the label over its description, a shortcut and trailing content.
+class _MenuRowContent extends StatelessWidget {
+  const _MenuRowContent({
+    required this.label,
+    required this.leading,
+    required this.reserveLeading,
+    required this.description,
+    required this.shortcut,
+    required this.trailing,
+    required this.labelColor,
+    required this.lit,
+  });
+
+  final Widget label;
+  final Widget? leading;
+  final bool reserveLeading;
+  final String? description;
+  final String? shortcut;
+  final Widget? trailing;
+  final Color labelColor;
+  final bool lit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    final leading = this.leading;
+    final description = this.description;
+    final shortcut = this.shortcut;
+    return Padding(
       padding: EdgeInsetsDirectional.fromSTEB(
         leading == null && reserveLeading ? _insetStart : 10,
         10,
@@ -950,8 +1140,14 @@ class _MenuRow extends StatelessWidget {
               dimension: _indicatorSize,
               child: Center(
                 child: IconTheme.merge(
-                  data: IconThemeData(color: iconColor, size: 16),
-                  child: leading!,
+                  // A glyph is muted at rest (PanelUI's icons draw in a mid
+                  // grey unless told otherwise) and takes the label's colour
+                  // while the row is lit, as in the web package.
+                  data: IconThemeData(
+                    color: lit ? labelColor : c.mutedForeground,
+                    size: 16,
+                  ),
+                  child: leading,
                 ),
               ),
             ),
@@ -968,44 +1164,29 @@ class _MenuRow extends StatelessWidget {
                   ),
                   child: label,
                 ),
-                if (description != null) Text(description!, style: muted),
+                if (description != null)
+                  Text(
+                    description,
+                    style: theme.typography.style(
+                      PanelTextSize.sm,
+                      color: c.mutedForeground,
+                    ),
+                  ),
               ],
             ),
           ),
           if (shortcut != null)
             Text(
-              shortcut!,
+              shortcut,
               style: theme.typography
                   .style(PanelTextSize.xs, color: c.mutedForeground)
+                  // `tracking-widest`: 0.1em.
                   .copyWith(letterSpacing: 1.2),
             ),
           ?trailing,
         ],
       ),
     );
-
-    final radius = BorderRadius.circular(theme.radii.xxl);
-    final fill = destructive ? c.destructiveSubtle : c.accent;
-    Widget row = PanelPressable(
-      focusNode: focusNode,
-      onPressed: enabled ? () => _activate(context) : null,
-      pressScale: 1,
-      checked: checked,
-      inMutuallyExclusiveGroup: inMutuallyExclusiveGroup,
-      semanticLabel: semanticLabel,
-      // No ring: as in PanelUI's web menu, a focused row is lit instead.
-      builder: (context, state) => _MenuRowFill(
-        pressed: state.pressed,
-        highlighted: state.hovered || state.focused,
-        fill: fill,
-        radius: radius,
-        child: content,
-      ),
-    );
-    row = MergeSemantics(
-      child: Semantics(role: role, expanded: expanded, child: row),
-    );
-    return Opacity(opacity: enabled ? 1 : 0.45, child: row);
   }
 }
 
@@ -1013,20 +1194,22 @@ class _MenuRow extends StatelessWidget {
 ///
 /// Swapping a fill in and out in one frame reads as a flash on a row this
 /// size; this fades it in over 90ms and back out over 160ms, and carries a
-/// slight shrink with it. A hovered or keyboard-focused row is lit at once,
-/// as PanelUI's web menu highlights a row.
+/// slight shrink with it. A row lit by the pointer or the keyboard takes its
+/// fill at once, as PanelUI's web menu highlights a row.
 class _MenuRowFill extends StatefulWidget {
   const _MenuRowFill({
     required this.pressed,
-    required this.highlighted,
-    required this.fill,
+    required this.lit,
+    required this.pressFill,
+    required this.litFill,
     required this.radius,
     required this.child,
   });
 
   final bool pressed;
-  final bool highlighted;
-  final Color fill;
+  final bool lit;
+  final Color pressFill;
+  final Color litFill;
   final BorderRadius radius;
   final Widget child;
 
@@ -1067,20 +1250,19 @@ class _MenuRowFillState extends State<_MenuRowFill>
       child: widget.child,
       builder: (context, child) {
         final t = _press.value;
-        final fill = widget.highlighted ? 1.0 : t.clamp(0.0, 1.0);
-        Widget row = DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: widget.radius,
-            color: fill == 0
-                ? null
-                : widget.fill.withValues(alpha: widget.fill.a * fill),
+        final Color? fill = widget.lit
+            ? widget.litFill
+            : (t == 0
+                  ? null
+                  : widget.pressFill.withValues(alpha: widget.pressFill.a * t));
+        // Always in the tree, so a press does not rebuild the row under it.
+        return Transform.scale(
+          scale: 1 - (1 - _pressScale) * t,
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: fill, borderRadius: widget.radius),
+            child: child,
           ),
-          child: child,
         );
-        if (t != 0) {
-          row = Transform.scale(scale: 1 - (1 - _pressScale) * t, child: row);
-        }
-        return row;
       },
     );
   }

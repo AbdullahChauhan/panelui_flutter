@@ -30,6 +30,9 @@ Widget _popover({
   double? minWidth,
   double? maxHeight,
   bool scrollable = false,
+  bool blur = false,
+  bool unstyled = false,
+  Widget? background,
   List<Widget>? children,
 }) {
   return PanelPopover(
@@ -47,6 +50,9 @@ Widget _popover({
     minWidth: minWidth,
     maxHeight: maxHeight,
     scrollable: scrollable,
+    blur: blur,
+    unstyled: unstyled,
+    background: background,
     builder: _trigger,
     children:
         children ??
@@ -57,13 +63,16 @@ Widget _popover({
   );
 }
 
-/// The panel's surface, found from its title.
+/// The panel's bordered surface, found from its title.
 Rect _panel(WidgetTester tester) => tester.getRect(
   find
       .ancestor(
         of: find.text('Export'),
         matching: find.byWidgetPredicate(
-          (w) => w is Container && w.decoration is BoxDecoration,
+          (w) =>
+              w is DecoratedBox &&
+              w.decoration is BoxDecoration &&
+              (w.decoration as BoxDecoration).border != null,
         ),
       )
       .first,
@@ -268,6 +277,24 @@ void main() {
     expect(pressed, 0);
   });
 
+  testWidgets('screen readers can close it from the layer behind', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(_popover()));
+    await _open(tester);
+    final close = tester.getSemantics(find.bySemanticsLabel('Close'));
+    expect(close.getSemanticsData().flagsCollection.isButton, isTrue);
+    tester.semantics.tap(find.semantics.byLabel('Close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Export'), findsNothing);
+
+    // Not dismissible, there is nothing to announce.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(wrap(_popover(dismissible: false)));
+    await _open(tester);
+    expect(find.bySemanticsLabel('Close'), findsNothing);
+  });
+
   testWidgets('a tap inside the panel keeps it open', (tester) async {
     await tester.pumpWidget(wrap(_popover()));
     await _open(tester);
@@ -381,6 +408,7 @@ void main() {
             StatefulBuilder(
               builder: (context, setState) => PanelSelect<String>(
                 key: const Key('select'),
+                presentation: PanelSelectPresentation.overlay,
                 value: fruit,
                 onChanged: (value) => setState(() => fruit = value),
                 options: const [
@@ -553,6 +581,146 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('Export'), findsNothing);
+  });
+
+  testWidgets('bare text in the panel is base size in the foreground', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        _popover(
+          initiallyOpen: true,
+          children: const [
+            PanelPopoverTitle(child: Text('Export')),
+            Text('Plain'),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final style = DefaultTextStyle.of(tester.element(find.text('Plain'))).style;
+    expect(style.color, PanelThemeData.panelLight.colors.foreground);
+    expect(style.fontSize, 16);
+  });
+
+  testWidgets('blur frosts the page behind instead of dimming it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(_popover(scrim: true)));
+    await _open(tester);
+    expect(find.byType(BackdropFilter), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(wrap(_popover(scrim: true, blur: true)));
+    await _open(tester);
+    expect(find.byType(BackdropFilter), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(BackdropFilter), findsNothing);
+  });
+
+  testWidgets('a background sits behind the content, inside the border', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        _popover(
+          background: const ColoredBox(
+            key: Key('background'),
+            color: Color(0xFF00FF00),
+          ),
+        ),
+      ),
+    );
+    await _open(tester);
+    final panel = _panel(tester);
+    expect(
+      tester.getRect(find.byKey(const Key('background'))),
+      panel.deflate(1),
+    );
+  });
+
+  testWidgets('unstyled drops the surface and keeps the gap', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        _popover(
+          unstyled: true,
+          children: const [
+            PanelPopoverTitle(child: Text('Export')),
+            PanelPopoverDescription(child: Text('Choose a format.')),
+          ],
+        ),
+      ),
+    );
+    await _open(tester);
+    expect(
+      find.ancestor(
+        of: find.text('Export'),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is DecoratedBox &&
+              (w.decoration as BoxDecoration?)?.border != null,
+        ),
+      ),
+      findsNothing,
+    );
+    final title = tester.getRect(find.text('Export'));
+    final description = tester.getRect(find.text('Choose a format.'));
+    expect(description.top - title.bottom, moreOrLessEquals(6));
+  });
+
+  testWidgets('a bottom sheet presentation opens and closes with its state', (
+    tester,
+  ) async {
+    final controller = PanelPopoverController();
+    addTearDown(controller.dispose);
+    final changes = <bool>[];
+    await tester.pumpWidget(
+      wrap(
+        PanelPopover(
+          controller: controller,
+          onOpenChange: changes.add,
+          presentation: PanelPopoverPresentation.bottomSheet,
+          builder: _trigger,
+          children: [
+            const PanelPopoverTitle(child: Text('Export')),
+            const Text('Plain'),
+            Builder(
+              builder: (context) => PanelButton(
+                key: const Key('done'),
+                onPressed: () => PanelPopover.of(context).close(),
+                child: const Text('Done'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    await _open(tester);
+    expect(find.text('Export'), findsOneWidget);
+    expect(find.byType(PanelBottomSheetBody), findsOneWidget);
+    // Bare text is PanelUI's, not whatever style the trigger sat in.
+    final plain = DefaultTextStyle.of(tester.element(find.text('Plain'))).style;
+    expect(plain.fontSize, 16);
+    expect(plain.color, PanelThemeData.panelLight.colors.foreground);
+    // No anchored panel: the content is in the sheet, below its close button.
+    expect(find.byType(BackdropFilter), findsNothing);
+
+    // Content closes it through the popover, and the sheet goes.
+    await tester.tap(find.byKey(const Key('done')));
+    await tester.pumpAndSettle();
+    expect(find.text('Export'), findsNothing);
+    expect(controller.isOpen, isFalse);
+
+    // Dismissed from the sheet itself, the popover hears about it.
+    await _open(tester);
+    expect(find.text('Export'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Export'), findsNothing);
+    expect(controller.isOpen, isFalse);
+    expect(changes, [true, false, true, false]);
   });
 
   for (final theme in allThemes) {

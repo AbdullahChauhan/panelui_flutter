@@ -1,5 +1,6 @@
 import 'dart:ui' show CheckedState, SemanticsRole, Tristate;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -580,6 +581,170 @@ void main() {
     await tester.pumpAndSettle();
     final trigger = tester.getRect(find.byKey(const Key('trigger')));
     expect(tester.getRect(find.text('Three')).bottom, lessThan(trigger.top));
+  });
+
+  testWidgets('a lit row takes the web highlight; at rest a glyph is muted', (
+    tester,
+  ) async {
+    final c = PanelThemeData.panelLight.colors;
+    await tester.pumpWidget(
+      wrap(
+        PanelMenu(
+          builder: _trigger,
+          children: [
+            PanelMenuItem(
+              leading: const PanelIcon(PanelIcons.pencil),
+              onSelected: () {},
+              child: const Text('Rename'),
+            ),
+            PanelMenuItem(
+              variant: PanelMenuItemVariant.destructive,
+              leading: const PanelIcon(PanelIcons.trash),
+              onSelected: () {},
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    // Opened with a mouse click, so hover highlights show.
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.down(tester.getCenter(find.byKey(const Key('trigger'))));
+    await mouse.up();
+    await tester.pumpAndSettle();
+
+    Color? labelColor(String label) =>
+        DefaultTextStyle.of(tester.element(find.text(label))).style.color;
+    Color? glyphColor(String label) => IconTheme.of(
+      tester.element(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text(label),
+            matching: find.byType(PanelPressable),
+          ),
+          matching: find.byType(PanelIcon),
+        ),
+      ),
+    ).color;
+    Color? fill(String label) =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find
+                          .ancestor(
+                            of: find.text(label),
+                            matching: find.byType(DecoratedBox),
+                          )
+                          .first,
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+
+    // At rest: PanelUI's native row. The destructive glyph is not red.
+    expect(labelColor('Rename'), c.overlayForeground);
+    expect(glyphColor('Rename'), c.mutedForeground);
+    expect(labelColor('Delete'), c.destructive);
+    expect(glyphColor('Delete'), c.mutedForeground);
+    expect(fill('Rename'), isNull);
+
+    await mouse.moveTo(tester.getCenter(find.text('Rename')));
+    await tester.pump();
+    expect(fill('Rename'), c.accent);
+    expect(labelColor('Rename'), c.accentForeground);
+    expect(glyphColor('Rename'), c.accentForeground);
+
+    await mouse.moveTo(tester.getCenter(find.text('Delete')));
+    await tester.pump();
+    expect(fill('Delete'), c.destructive.withValues(alpha: 0.1));
+    expect(glyphColor('Delete'), c.destructive);
+    expect(fill('Rename'), isNull);
+  });
+
+  testWidgets('a closed submenu still leaves the menu gap under its row', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        PanelMenu(
+          builder: _trigger,
+          children: [
+            PanelMenuSub(
+              children: [
+                PanelMenuItem(onSelected: () {}, child: const Text('Inbox')),
+              ],
+              child: const Text('Move to'),
+            ),
+            PanelMenuItem(onSelected: () {}, child: const Text('Delete')),
+          ],
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('trigger')));
+    await tester.pumpAndSettle();
+    Rect row(String label) => tester.getRect(
+      find.ancestor(
+        of: find.text(label),
+        matching: find.byType(PanelPressable),
+      ),
+    );
+    // PanelUI's trigger row and its rows are two items of the menu's column,
+    // 6pt apart in a scrolling menu, so a folded submenu leaves two gaps.
+    expect(row('Delete').top - row('Move to').bottom, moreOrLessEquals(12));
+  });
+
+  testWidgets('presented as a sheet, rows run, toggle and close it', (
+    tester,
+  ) async {
+    var archived = false;
+    final selected = <String>[];
+    await tester.pumpWidget(
+      wrap(
+        StatefulBuilder(
+          builder: (context, setState) => PanelMenu(
+            presentation: PanelPopoverPresentation.bottomSheet,
+            builder: _trigger,
+            children: [
+              PanelMenuCheckboxItem(
+                value: archived,
+                onChanged: (v) => setState(() => archived = v),
+                child: const Text('Archived'),
+              ),
+              PanelMenuItem(
+                onSelected: () => selected.add('share'),
+                child: const Text('Share'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('trigger')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PanelBottomSheetBody), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text('Share')).role,
+      SemanticsRole.menuItem,
+    );
+
+    // A toggle keeps the sheet up, and the sheet shows the new state.
+    await tester.tap(find.text('Archived'));
+    await tester.pumpAndSettle();
+    expect(archived, isTrue);
+    expect(
+      tester
+          .getSemantics(find.text('Archived'))
+          .getSemanticsData()
+          .flagsCollection
+          .isChecked,
+      CheckedState.isTrue,
+    );
+
+    await tester.tap(find.text('Share'));
+    await tester.pumpAndSettle();
+    expect(selected, ['share']);
+    expect(find.text('Share'), findsNothing);
   });
 
   for (final theme in allThemes) {
