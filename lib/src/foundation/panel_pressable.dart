@@ -260,6 +260,14 @@ class _PanelPressableState extends State<PanelPressable>
       );
     }
 
+    // A label names the control in place of its content, the way PanelUI's
+    // accessibilityLabel does; without this the visible text would be read
+    // after it a second time. Only the content is excluded, so the focus
+    // handling below still marks the node focusable.
+    if (widget.semanticLabel != null) {
+      content = ExcludeSemantics(child: content);
+    }
+
     final enabled = _enabled;
     return Semantics(
       container: true,
@@ -272,10 +280,6 @@ class _PanelPressableState extends State<PanelPressable>
       inMutuallyExclusiveGroup: widget.inMutuallyExclusiveGroup,
       label: widget.semanticLabel,
       hint: widget.semanticHint,
-      // A label names the control in place of its content, the way PanelUI's
-      // accessibilityLabel does; without this the visible text would be read
-      // after it a second time.
-      excludeSemantics: widget.semanticLabel != null,
       onTap: enabled && widget.onPressed != null ? widget.onPressed : null,
       onLongPress: enabled && widget.onLongPress != null
           ? widget.onLongPress

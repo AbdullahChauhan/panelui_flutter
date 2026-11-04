@@ -284,7 +284,8 @@ class _PanelCheckboxState extends State<PanelCheckbox>
 
     return PanelPressable(
       onPressed: enabled ? _toggle : null,
-      pressScale: card ? 0.98 : 1,
+      // PanelUI draws a checkbox on a plain Pressable: no press shrink.
+      pressScale: 1,
       isButton: false,
       checked: widget.indeterminate ? null : widget.value,
       mixed: widget.indeterminate ? true : null,
