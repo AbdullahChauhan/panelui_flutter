@@ -27,7 +27,8 @@ enum PanelPaginationVariant {
 
 /// How big the targets of a [PanelPagination] are.
 enum PanelPaginationSize {
-  /// 32pt targets with 12px numbers.
+  /// 32pt targets with 12px numbers, still pressed like 44pt ones: a press
+  /// up to 6pt outside a target reaches it.
   sm,
 
   /// 44pt targets with 14px numbers, the default.
@@ -78,9 +79,6 @@ final class PanelPaginationGap extends PanelPaginationEntry {
   @override
   String toString() => towardsStart ? 'start-ellipsis' : 'end-ellipsis';
 }
-
-List<int> _range(int start, int end) =>
-    end < start ? const [] : [for (var i = start; i <= end; i++) i];
 
 /// Which page numbers a [PanelPagination] draws, and where the gaps go.
 ///
@@ -248,39 +246,18 @@ class _PanelPaginationState extends State<PanelPagination> {
     final count = widget.count;
     final size = widget.size;
     final enabled = widget.enabled;
-    final small = size == PanelPaginationSize.sm;
+    final labelled = widget.variant == PanelPaginationVariant.simple;
 
-    Widget arrow(int step) {
-      final target = page + step;
-      final live = enabled && target >= 1 && target <= count;
-      final word = step < 0 ? widget.previousLabel : widget.nextLabel;
-      final labelled = widget.variant == PanelPaginationVariant.simple;
-      final glyph = PanelIcon(
-        step < 0 ? PanelIcons.chevronLeft : PanelIcons.chevronRight,
-        size: small ? 16 : 20,
-        color: theme.colors.foreground,
-      );
-      final text = Text(
-        word,
-        style: _labelStyle(theme, size, theme.colors.foreground),
-      );
-      return _PaginationTarget(
-        size: size,
-        enabled: live,
-        semanticLabel: word,
-        horizontalPadding: labelled ? (small ? 8 : 12) : 4,
-        onPressed: () => _goTo(target),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 4,
-          children: step < 0
-              ? [glyph, if (labelled) text]
-              : [if (labelled) text, glyph],
-        ),
-      );
-    }
+    Widget arrow(int step) => _PaginationArrow(
+      step: step,
+      size: size,
+      label: step < 0 ? widget.previousLabel : widget.nextLabel,
+      labelled: labelled,
+      enabled: enabled && page + step >= 1 && page + step <= count,
+      onPressed: () => _goTo(page + step),
+    );
 
-    final children = <Widget>[
+    final controls = <Widget>[
       if (widget.showControls) arrow(-1),
       if (widget.variant == PanelPaginationVariant.numbers)
         for (final entry in panelPaginationRange(
@@ -290,24 +267,12 @@ class _PanelPaginationState extends State<PanelPagination> {
           boundaries: widget.boundaries,
         ))
           switch (entry) {
-            PanelPaginationPage(:final number) => _PaginationTarget(
+            PanelPaginationPage(:final number) => _PaginationPageTarget(
+              number: number,
               size: size,
-              enabled: enabled,
               current: number == page,
-              selected: number == page,
-              semanticLabel: 'Page $number',
-              horizontalPadding: 4,
+              enabled: enabled,
               onPressed: () => _goTo(number),
-              child: Text(
-                '$number',
-                style: _labelStyle(
-                  theme,
-                  size,
-                  number == page
-                      ? theme.colors.primaryForeground
-                      : theme.colors.foreground,
-                ),
-              ),
             ),
             PanelPaginationGap(:final towardsStart) => _PaginationEllipsis(
               size: size,
@@ -320,68 +285,130 @@ class _PanelPaginationState extends State<PanelPagination> {
             ),
           },
       if (widget.variant == PanelPaginationVariant.compact)
-        Semantics(
-          container: true,
-          label: 'Page $page of $count',
-          child: ExcludeSemantics(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text('$page / $count', style: _mutedStyle(theme, size)),
-            ),
-          ),
-        ),
+        _PaginationSummary(page: page, count: count, size: size),
       if (widget.showControls) arrow(1),
     ];
 
     // A run too wide for its space keeps its leading edge and is clipped at
     // the trailing one, which at least looks deliberate; a centred row that
     // overflowed would hang off both ends.
-    final controls = UnconstrainedBox(
+    final run = UnconstrainedBox(
       constrainedAxis: Axis.vertical,
       alignment: AlignmentDirectional.centerStart,
       clipBehavior: Clip.hardEdge,
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        spacing: small ? 2 : 4,
-        children: children,
+        // `gap-1`, and `gap-0.5` small.
+        spacing: size == PanelPaginationSize.sm ? 2 : 4,
+        children: controls,
       ),
     );
 
     final leading = widget.leading;
-    final Widget row = leading == null
-        ? Center(heightFactor: 1, child: controls)
-        : LayoutBuilder(
-            builder: (context, constraints) => Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              spacing: 12,
-              children: [
-                Flexible(
-                  child: _PaginationScope(
-                    page: page,
-                    size: size,
-                    child: DefaultTextStyle(
-                      style: _mutedStyle(theme, size),
-                      child: leading,
-                    ),
-                  ),
-                ),
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-                  child: controls,
-                ),
-              ],
-            ),
-          );
-
     return Semantics(
       container: true,
       explicitChildNodes: true,
       role: SemanticsRole.navigation,
       label: widget.semanticLabel,
-      child: row,
+      child: leading == null
+          ? Center(heightFactor: 1, child: run)
+          : _LeadingRow(
+              leading: _PaginationScope(
+                page: page,
+                size: size,
+                child: DefaultTextStyle(
+                  style: _mutedStyle(theme, size),
+                  child: leading,
+                ),
+              ),
+              run: run,
+            ),
     );
   }
 }
+
+/// The line that says how much of the set you are looking at: `1–20 of 240`.
+///
+/// Worth having beside a table, because a page number alone does not say
+/// how much is left. Inside a [PanelPagination] (as its `leading`) it reads
+/// the current page from the row; [page] overrides that. Given a [child] it
+/// shows that instead, for a set whose size is not known yet.
+class PanelPaginationStatus extends StatelessWidget {
+  /// Creates a status line.
+  const PanelPaginationStatus({
+    super.key,
+    this.page,
+    this.pageSize,
+    this.total,
+    this.child,
+  });
+
+  /// The page the span is counted from. Read from the enclosing
+  /// [PanelPagination] when null.
+  final int? page;
+
+  /// How many rows a page holds.
+  final int? pageSize;
+
+  /// How many rows there are altogether.
+  final int? total;
+
+  /// Shown in place of the span.
+  final Widget? child;
+
+  /// `1–20 of 240`, or `None` for an empty set, or nothing until both
+  /// [pageSize] and [total] are known.
+  String _span(int page) {
+    final rows = pageSize;
+    final all = total;
+    if (rows == null || all == null) return '';
+    if (all <= 0) return 'None';
+    final from = (page - 1) * rows + 1;
+    // The last page is nearly always short; counting a full one past the end
+    // is the classic off-by-a-page-size.
+    final to = math.min(page * rows, all);
+    return '$from–$to of $all';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_PaginationScope>();
+    final style = _mutedStyle(theme, scope?.size ?? PanelPaginationSize.md);
+    final custom = child;
+    return Semantics(
+      container: true,
+      child: custom != null
+          ? DefaultTextStyle(style: style, child: custom)
+          : Text(_span(page ?? scope?.page ?? 1), style: style),
+    );
+  }
+}
+
+List<int> _range(int start, int end) =>
+    end < start ? const [] : [for (var i = start; i <= end; i++) i];
+
+/// The side of a target: 44pt (`h-11 min-w-11`), or 32pt (`h-8 min-w-8`)
+/// small.
+double _targetExtent(PanelPaginationSize size) =>
+    size == PanelPaginationSize.sm ? 32 : 44;
+
+/// The size of an arrow or an ellipsis glyph.
+double _glyphSize(PanelPaginationSize size) =>
+    size == PanelPaginationSize.sm ? 16 : 20;
+
+/// What the small size gives back outside its paint: exactly the difference
+/// between its 32pt targets and the 44pt a finger reliably hits. Like
+/// PanelUI's, it reaches only as far as the row's own bounds, so in practice
+/// it takes presses in the gaps between targets.
+const EdgeInsets _smallHitSlop = EdgeInsets.all(6);
+
+EdgeInsets? _hitSlop(PanelPaginationSize size) =>
+    size == PanelPaginationSize.sm ? _smallHitSlop : null;
+
+/// A dead target's opacity (`opacity-[0.4]`).
+const double _disabledOpacity = 0.4;
 
 TextStyle _labelStyle(
   PanelThemeData theme,
@@ -419,59 +446,221 @@ class _PaginationScope extends InheritedWidget {
       page != oldWidget.page || size != oldWidget.size;
 }
 
-/// One pressable target: a page number or an arrow.
+/// The row with leading content: the content on the leading edge and the
+/// run on the trailing one, 12pt apart at the least (`justify-between
+/// gap-3`).
+///
+/// The run is laid out first, bounded by the row's width so that it clips
+/// rather than overflows, and the content takes what is left. A row hands an
+/// unflexed child unbounded width, so the bound is read from the
+/// constraints.
+class _LeadingRow extends StatelessWidget {
+  const _LeadingRow({required this.leading, required this.run});
+
+  final Widget leading;
+  final Widget run;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        spacing: 12,
+        children: [
+          Flexible(child: leading),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+            child: run,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The square-ish target every page number and arrow is drawn in: at least
+/// as wide as it is tall, 4pt of padding either side unless [paddingX] says
+/// otherwise, filled with the primary colour when [current].
 class _PaginationTarget extends StatelessWidget {
   const _PaginationTarget({
     required this.size,
     required this.enabled,
     required this.semanticLabel,
-    required this.horizontalPadding,
     required this.onPressed,
     required this.child,
-    this.current = false,
-    this.selected,
+    this.current,
+    this.paddingX = 4,
   });
 
   final PanelPaginationSize size;
   final bool enabled;
-  final bool current;
 
-  /// Announced selected state: set on page numbers, left off the arrows.
-  final bool? selected;
+  /// Whether this is the page you are on, announced as its selected state.
+  /// Null for an arrow, which has no such state.
+  final bool? current;
   final String semanticLabel;
-  final double horizontalPadding;
+  final double paddingX;
   final VoidCallback onPressed;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
-    final extent = size == PanelPaginationSize.sm ? 32.0 : 44.0;
+    final extent = _targetExtent(size);
     final radius = BorderRadius.circular(theme.radii.lg);
     return PanelPressable(
       onPressed: enabled ? onPressed : null,
       semanticLabel: semanticLabel,
       // The page you are on is announced as selected, so it is spoken as
       // state rather than only painted.
-      selected: selected,
+      selected: current,
+      hitSlop: _hitSlop(size),
       focusRingRadius: radius,
       child: Opacity(
-        opacity: enabled ? 1 : 0.4,
+        opacity: enabled ? 1 : _disabledOpacity,
         child: Container(
           height: extent,
           constraints: BoxConstraints(minWidth: extent),
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          decoration: current
+          padding: EdgeInsets.symmetric(horizontal: paddingX),
+          decoration: current ?? false
               ? BoxDecoration(color: theme.colors.primary, borderRadius: radius)
               : null,
-          child: Center(widthFactor: 1, child: ExcludeSemantics(child: child)),
+          child: Center(widthFactor: 1, child: child),
         ),
       ),
     );
   }
 }
 
-/// The gap in the run, and a way across it.
+/// A page number, announced as "Page 3" and as selected while it is the
+/// page you are on.
+class _PaginationPageTarget extends StatelessWidget {
+  const _PaginationPageTarget({
+    required this.number,
+    required this.size,
+    required this.current,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final int number;
+  final PanelPaginationSize size;
+  final bool current;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    return _PaginationTarget(
+      size: size,
+      enabled: enabled,
+      current: current,
+      semanticLabel: 'Page $number',
+      onPressed: onPressed,
+      child: Text(
+        '$number',
+        style: _labelStyle(
+          theme,
+          size,
+          current ? c.primaryForeground : c.foreground,
+        ),
+      ),
+    );
+  }
+}
+
+/// The previous or next arrow: the same button pointed the other way, with
+/// its word written beside it when [labelled].
+///
+/// The chevrons turn around in a right-to-left row, where the previous page
+/// is to the right. PanelUI swaps its chevrons for that as well as mirroring
+/// them, which turns them back to face each other; here they turn once.
+class _PaginationArrow extends StatelessWidget {
+  const _PaginationArrow({
+    required this.step,
+    required this.size,
+    required this.label,
+    required this.labelled,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  /// -1 for previous, 1 for next.
+  final int step;
+  final PanelPaginationSize size;
+  final String label;
+  final bool labelled;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final foreground = theme.colors.foreground;
+    final previous = step < 0;
+    final glyph = PanelIcon(
+      previous ? PanelIcons.chevronLeft : PanelIcons.chevronRight,
+      size: _glyphSize(size),
+      color: foreground,
+    );
+    final word = labelled
+        ? Text(label, style: _labelStyle(theme, size, foreground))
+        : null;
+    return _PaginationTarget(
+      size: size,
+      enabled: enabled,
+      semanticLabel: label,
+      // A labelled arrow is a wider button (`px-3`, `px-2` small).
+      paddingX: labelled ? (size == PanelPaginationSize.sm ? 8 : 12) : 4,
+      onPressed: onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 4,
+        children: previous ? [glyph, ?word] : [?word, glyph],
+      ),
+    );
+  }
+}
+
+/// `3 / 12`: where you are, in the space the two arrows leave between them,
+/// and read out as "Page 3 of 12". Digits and a slash rather than the
+/// sentence, which a phone has no room for and which would need translating.
+class _PaginationSummary extends StatelessWidget {
+  const _PaginationSummary({
+    required this.page,
+    required this.count,
+    required this.size,
+  });
+
+  final int page;
+  final int count;
+  final PanelPaginationSize size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: 'Page $page of $count',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            '$page / $count',
+            style: _mutedStyle(PanelTheme.of(context), size),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The gap in the run, and a way across it: a press jumps [jump] pages
+/// towards the end the gap is on.
+///
+/// It keeps its full opacity in a disabled row, as PanelUI's does: its glyph
+/// is muted already, and only the targets dim.
 class _PaginationEllipsis extends StatelessWidget {
   const _PaginationEllipsis({
     required this.size,
@@ -490,87 +679,21 @@ class _PaginationEllipsis extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
-    final small = size == PanelPaginationSize.sm;
-    final extent = small ? 32.0 : 44.0;
     return PanelPressable(
       onPressed: enabled ? onPressed : null,
       semanticLabel: towardsStart ? 'Back $jump pages' : 'Forward $jump pages',
+      hitSlop: _hitSlop(size),
       focusRingRadius: BorderRadius.circular(theme.radii.lg),
-      child: Opacity(
-        opacity: enabled ? 1 : 0.4,
-        child: SizedBox.square(
-          dimension: extent,
-          child: Center(
-            child: PanelIcon(
-              PanelIcons.ellipsis,
-              size: small ? 16 : 20,
-              color: theme.colors.mutedForeground,
-            ),
+      child: SizedBox.square(
+        dimension: _targetExtent(size),
+        child: Center(
+          child: PanelIcon(
+            PanelIcons.ellipsis,
+            size: _glyphSize(size),
+            color: theme.colors.mutedForeground,
           ),
         ),
       ),
     );
-  }
-}
-
-/// The line that says how much of the set you are looking at: `1–20 of 240`.
-///
-/// Worth having beside a table, because a page number alone does not say
-/// how much is left. Inside a [PanelPagination] (as its `leading`) it reads
-/// the current page from the row; [page] overrides that. Given a [child] it
-/// shows that instead, for a set whose size is not known yet.
-class PanelPaginationStatus extends StatelessWidget {
-  /// Creates a status line.
-  const PanelPaginationStatus({
-    super.key,
-    this.page,
-    this.pageSize,
-    this.total,
-    this.child,
-  });
-
-  /// The page the span is counted from. Read from the enclosing
-  /// [PanelPagination] when null.
-  final int? page;
-
-  /// How many rows a page holds.
-  final int? pageSize;
-
-  /// How many rows there are altogether.
-  final int? total;
-
-  /// Shown in place of the span.
-  final Widget? child;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = PanelTheme.of(context);
-    final scope = context
-        .dependOnInheritedWidgetOfExactType<_PaginationScope>();
-    final size = scope?.size ?? PanelPaginationSize.md;
-    final style = _mutedStyle(theme, size);
-    final custom = child;
-    if (custom != null) {
-      return Semantics(
-        container: true,
-        child: DefaultTextStyle(style: style, child: custom),
-      );
-    }
-    final current = page ?? scope?.page ?? 1;
-    final rows = pageSize;
-    final all = total;
-    String text = '';
-    if (rows != null && all != null) {
-      if (all <= 0) {
-        text = 'None';
-      } else {
-        final from = (current - 1) * rows + 1;
-        // The last page is nearly always short; counting a full one past the
-        // end is the classic off-by-a-page-size.
-        final to = math.min(current * rows, all);
-        text = '$from–$to of $all';
-      }
-    }
-    return Semantics(container: true, child: Text(text, style: style));
   }
 }

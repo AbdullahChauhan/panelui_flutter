@@ -212,6 +212,51 @@ void main() {
       expect(find.text('None'), findsOneWidget);
     });
 
+    testWidgets('a small row takes presses in the gaps between targets', (
+      tester,
+    ) async {
+      final pages = <int>[];
+      await tester.pumpWidget(
+        wrap(
+          PanelPagination(
+            count: 12,
+            size: PanelPaginationSize.sm,
+            onChanged: pages.add,
+          ),
+        ),
+      );
+      final two = tester.getRect(find.text('2').hitTestable());
+      final twoTarget = tester.getRect(
+        find
+            .ancestor(of: find.text('2'), matching: find.byType(Container))
+            .first,
+      );
+      expect(twoTarget.height, 32);
+      // 1pt past the target's trailing edge, in the 2pt gap before page 3.
+      await tester.tapAt(Offset(twoTarget.right + 1, two.center.dy));
+      await tester.pumpAndSettle();
+      expect(pages, [3]);
+    });
+
+    testWidgets('a disabled row dims its targets but not its gaps', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(const PanelPagination(count: 40, page: 20, enabled: false)),
+      );
+      final page = tester.widget<Opacity>(
+        find.ancestor(of: find.text('20'), matching: find.byType(Opacity)),
+      );
+      expect(page.opacity, 0.4);
+      final gap = find.byWidgetPredicate(
+        (w) => w is PanelIcon && w.icon == PanelIcons.ellipsis,
+      );
+      expect(
+        find.ancestor(of: gap.first, matching: find.byType(Opacity)),
+        findsNothing,
+      );
+    });
+
     testWidgets('a run too wide for its space is clipped, not overflowed', (
       tester,
     ) async {
