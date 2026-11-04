@@ -136,19 +136,45 @@ void main() {
 
   testWidgets('the close button closes it with null', (tester) async {
     await _open(tester, const _Opener());
-    // A 16pt cross in a 32pt circle, in a 48pt target.
+    // A 16pt cross in a 32pt circle, 12pt from the top and 16pt from the end.
     final close = find.bySemanticsLabel('Close');
-    expect(tester.getSize(close), const Size(48, 48));
+    final circle = tester.getRect(close);
+    final sheet = tester.getRect(_surface());
+    expect(circle.size, const Size(32, 32));
+    expect(circle.top - sheet.top, 1 + 12);
+    expect(sheet.right - circle.right, 1 + 16);
     final glyph = find.descendant(
       of: find.byType(PanelPressable),
       matching: find.byType(PanelIcon),
     );
     expect(tester.getSize(glyph), const Size(16, 16));
-    await tester.tap(find.bySemanticsLabel('Close'));
+
+    // Its target reaches 8pt past the circle.
+    await tester.tapAt(circle.centerLeft - const Offset(7, 0));
     await tester.pumpAndSettle();
     expect(find.text('Rate your order'), findsNothing);
     expect(_state(tester).returned, isTrue);
     expect(_state(tester).result, isNull);
+  });
+
+  testWidgets('a press dims the close button at once, without a shrink', (
+    tester,
+  ) async {
+    await _open(tester, const _Opener());
+    final close = find.bySemanticsLabel('Close');
+    final gesture = await tester.startGesture(tester.getCenter(close));
+    // Past the wait for the sheet's drag to give up the touch.
+    await tester.pump(const Duration(milliseconds: 150));
+    final dim = tester.widget<Opacity>(
+      find.descendant(of: close, matching: find.byType(Opacity)).first,
+    );
+    expect(dim.opacity, 0.7);
+    expect(
+      find.descendant(of: close, matching: find.byType(Transform)),
+      findsNothing,
+    );
+    await gesture.cancel();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a tap on the scrim and Escape close it', (tester) async {
@@ -171,11 +197,12 @@ void main() {
     final gesture = await tester.startGesture(
       tester.getCenter(find.text('Rate your order')),
     );
-    // The first move is taken by the drag slop; the sheet follows the rest.
+    // Once the drag starts the sheet follows the whole of the finger's
+    // travel, the slop included, so the point it was taken by stays under it.
     await gesture.moveBy(const Offset(0, 40));
     await gesture.moveBy(const Offset(0, 60));
     await tester.pump();
-    expect(tester.getRect(_surface()).top, top + 60);
+    expect(tester.getRect(_surface()).top, top + 100);
     // 140pt down, past the 120pt threshold, and released at rest.
     await gesture.moveBy(const Offset(0, 80));
     await tester.pump(const Duration(milliseconds: 500));
@@ -219,14 +246,52 @@ void main() {
     final gesture = await tester.startGesture(
       tester.getCenter(find.text('Rate your order')),
     );
-    await gesture.moveBy(const Offset(0, -30));
-    await gesture.moveBy(const Offset(0, -60));
-    await tester.pump();
+    // Each move is added to where the sheet is and the result cut to a
+    // third, so it settles near half a move above rest however far the
+    // finger goes: 300pt up leaves it about 10pt up.
+    for (var i = 0; i < 15; i++) {
+      await gesture.moveBy(const Offset(0, -20));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
     final lifted = top - tester.getRect(_surface()).top;
-    expect(lifted, closeTo(90 / 3 - 6, 6));
+    expect(lifted, closeTo(20 / 2, 0.5));
+    // A move back down is taken whole.
+    await gesture.moveBy(const Offset(0, 30));
+    await tester.pump();
+    expect(tester.getRect(_surface()).top, closeTo(top + 30 - lifted, 0.5));
     await gesture.up();
     await tester.pumpAndSettle();
     expect(tester.getRect(_surface()).top, closeTo(top, 0.5));
+  });
+
+  testWidgets('taken hold of while it rises, it stops under the finger', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(const _Opener(size: PanelBottomSheetSize.half)),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    final caught = tester.getRect(_surface()).top;
+    // Partway up: on screen, short of its resting place.
+    expect(caught, inExclusiveRange(300, 580));
+
+    final gesture = await tester.startGesture(Offset(400, caught + 10));
+    await gesture.moveBy(const Offset(0, 30));
+    await tester.pump(const Duration(milliseconds: 100));
+    // Without the catch it would have gone on rising under the finger.
+    expect(tester.getRect(_surface()).top, closeTo(caught + 30, 0.5));
+
+    // The rest of its rise is the drag's now: pushed back to 40pt short of
+    // rest and let go slowly, it springs the rest of the way.
+    final above = tester.getRect(_surface()).top - 300 - 40;
+    await gesture.moveBy(Offset(0, -above));
+    await tester.pump(const Duration(milliseconds: 400));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Rate your order'), findsOneWidget);
+    expect(tester.getRect(_surface()).top, 300);
   });
 
   testWidgets('a sheet that is not dismissible holds still and stays', (
@@ -296,6 +361,84 @@ void main() {
       TargetPlatform.android,
       TargetPlatform.iOS,
     }),
+  );
+
+  testWidgets('a body the caller wraps in Expanded takes the height left', (
+    tester,
+  ) async {
+    await _open(
+      tester,
+      _Opener(
+        size: PanelBottomSheetSize.full,
+        builder: (context) => Column(
+          children: [
+            const PanelBottomSheetHeader(title: Text('Components')),
+            Expanded(
+              child: PanelBottomSheetBody(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                spacing: 16,
+                children: [for (var i = 0; i < 40; i++) Text('Row $i')],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    final body = tester.getRect(find.byType(SingleChildScrollView));
+    final sheet = tester.getRect(_surface());
+    // Down to the sheet's 16pt bottom padding.
+    expect(body.bottom, closeTo(sheet.bottom - 16, 0.5));
+  });
+
+  testWidgets(
+    'the body draws no scrollbar, as PanelUI hides its indicator',
+    (tester) async {
+      await _open(
+        tester,
+        const _Opener(builder: _listSheet, size: PanelBottomSheetSize.half),
+      );
+      expect(find.byType(RawScrollbar), findsNothing);
+    },
+    variant: const TargetPlatformVariant({
+      TargetPlatform.macOS,
+      TargetPlatform.windows,
+    }),
+  );
+
+  testWidgets(
+    'a touch on the list that catches the sheet settling lets it settle',
+    (tester) async {
+      await _open(
+        tester,
+        const _Opener(builder: _listSheet, size: PanelBottomSheetSize.half),
+      );
+      final top = tester.getRect(_surface()).top;
+
+      // Pull the sheet down by the list at its top, and let it go slowly.
+      final pull = await tester.startGesture(
+        tester.getCenter(find.text('Country 1')),
+      );
+      for (var i = 0; i < 4; i++) {
+        await pull.moveBy(const Offset(0, 20));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pump(const Duration(milliseconds: 300));
+      await pull.up();
+      await tester.pump(const Duration(milliseconds: 30));
+      expect(tester.getRect(_surface()).top, greaterThan(top + 20));
+
+      // A touch that stops it on its way back and lifts straight after the
+      // drag starts must not leave it stranded there.
+      final touch = await tester.startGesture(
+        tester.getCenter(find.text('Country 2')),
+      );
+      await touch.moveBy(const Offset(0, -20));
+      await touch.up();
+      await tester.pumpAndSettle();
+      expect(tester.getRect(_surface()).top, closeTo(top, 0.5));
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
   );
 
   testWidgets('a mouse drags it by the handle, not by the list', (
@@ -440,13 +583,10 @@ void main() {
   ) async {
     final handle = tester.ensureSemantics();
     await _open(tester, const _Opener());
+    // A plain line of text, as in PanelUI, that names the route.
     expect(
       tester.getSemantics(find.text('Rate your order')),
-      matchesSemantics(
-        label: 'Rate your order',
-        isHeader: true,
-        namesRoute: true,
-      ),
+      matchesSemantics(label: 'Rate your order', namesRoute: true),
     );
     expect(find.bySemanticsLabel('Close sheet'), findsOneWidget);
     handle.dispose();
