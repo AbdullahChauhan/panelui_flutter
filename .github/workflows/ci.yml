@@ -1,0 +1,71 @@
+name: CI
+
+# Every push and pull request is checked. A push to main also publishes the
+# gallery to GitHub Pages, so the site always shows what main does.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.9
+
+jobs:
+  check:
+    name: Format, analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test tool example/lib example/test
+      - run: flutter analyze
+      - run: flutter test
+      - name: Gallery smoke test
+        working-directory: example
+        run: flutter test
+
+  pages:
+    name: Publish the gallery
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      # WebAssembly where the browser supports it (falling back to
+      # JavaScript elsewhere), with the renderer bundled rather than fetched
+      # from a CDN, under the repository's Pages path.
+      - name: Build
+        working-directory: example
+        run: >-
+          flutter build web --release --wasm --no-web-resources-cdn
+          --base-href "/${{ github.event.repository.name }}/"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: example/build/web
+      - id: deploy
+        uses: actions/deploy-pages@v4
