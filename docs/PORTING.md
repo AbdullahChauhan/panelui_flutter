@@ -23,6 +23,7 @@ usually carries over.
 | `lib/src/theme/panel_motion.dart` | `PanelSprings`, `PanelDurations`, `panelEase`, `controller.springTo()`, `panelReduceMotion()`. |
 | `lib/src/foundation/panel_pressable.dart` | `PanelPressable`: press feedback, focus, hover, keyboard activation, semantics. |
 | `lib/src/foundation/panel_decoration.dart` | `PanelBoxDecoration`, `PanelShapeDecoration` and `paintPanelShadows`: shadows cast as CSS casts them. |
+| `lib/src/foundation/panel_hover_fade.dart` | `PanelHoverFade`: a control easing into and out of its web hover look. |
 | `lib/src/foundation/panel_text.dart` | `PanelText`. |
 | `lib/src/icons/` | `PanelIcon` and `PanelIcons` (PanelUI's icon names mapped onto the same HugeIcons glyphs). |
 | `lib/src/components/<name>.dart` | One file per component, or per small family of components. |
@@ -96,6 +97,10 @@ one shared value (a switch's thumb position and track fill).
   which interpolate in premultiplied alpha as a CSS transition does.
   `ColorTween` and `Color.lerp`, which an `AnimatedContainer` uses, pass
   through a grey neither end has.
+- Where the web class eases its hover (`transition-[…] duration-200`), wrap
+  the part in `PanelHoverFade(duration: …)` and blend its hover colours by
+  the value it gives with `panelLerpColor`. Only the hover eases that way:
+  what PanelUI changes at once, such as being selected, still lands at once.
 - State a control's `expanded`, `semanticValue` and `semanticRole` on
   `PanelPressable` rather than nesting a `Semantics` that relies on merging.
 - Carry PanelUI's accessibility state over to `Semantics` flags: `checked`,

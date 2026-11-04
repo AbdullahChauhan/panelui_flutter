@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_focus_ring.dart';
+import '../foundation/panel_hover_fade.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
@@ -338,17 +339,20 @@ class _CheckboxBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = PanelTheme.of(context).colors;
     final shape = BorderRadius.circular(radius);
-    final Widget box = Container(
-      width: dimension,
-      height: dimension,
-      decoration: BoxDecoration(
-        color: c.background,
-        borderRadius: shape,
-        border: Border.all(
-          // The web package's hover: the edge darkens a quarter of the way
-          // towards the foreground.
-          color: hovered ? c.input.mixOklab(c.foreground, 0.25) : c.input,
+    // The web package's hover: the edge darkens a quarter of the way towards
+    // the foreground, over its `duration-150`.
+    final litEdge = c.input.mixOklab(c.foreground, 0.25);
+    final Widget box = PanelHoverFade(
+      hovered: hovered,
+      builder: (context, hover, fill) => Container(
+        width: dimension,
+        height: dimension,
+        decoration: BoxDecoration(
+          color: c.background,
+          borderRadius: shape,
+          border: Border.all(color: panelLerpColor(c.input, litEdge, hover)),
         ),
+        child: fill,
       ),
       // The fill sits inside the border, as PanelUI's `absolute inset-0` fill
       // does, so the box keeps its edge when checked.

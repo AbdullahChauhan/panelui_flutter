@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_decoration.dart';
 import '../foundation/panel_focus_ring.dart';
+import '../foundation/panel_hover_fade.dart';
 import '../foundation/panel_pressable.dart';
 import '../theme/panel_color_mix.dart';
 import '../theme/panel_motion.dart';
@@ -175,6 +176,10 @@ const double _border = 1;
 /// The space between the track's border and the thumb (`p-[3px]`).
 const double _padding = 3;
 
+/// How long the track takes to darken under the pointer: the web package's
+/// `duration-200`.
+const Duration _hoverDuration = Duration(milliseconds: 200);
+
 /// The track, its fill and the thumb, drawn at [progress] from off (0) to on
 /// (1).
 class _SwitchTrack extends StatelessWidget {
@@ -210,15 +215,21 @@ class _SwitchTrack extends StatelessWidget {
       ),
     );
 
-    final Widget track = Container(
-      width: size.width,
-      height: size.height,
-      padding: const EdgeInsets.all(_border),
-      decoration: BoxDecoration(
-        // The web package's hover: the track darkens 8% of the way towards
-        // the foreground.
-        color: hovered ? c.input.mixOklab(c.foreground, 0.08) : c.input,
-        borderRadius: pill,
+    // The web package's hover: the track darkens 8% of the way towards the
+    // foreground, over its `duration-200`.
+    final litTrack = c.input.mixOklab(c.foreground, 0.08);
+    final Widget track = PanelHoverFade(
+      hovered: hovered,
+      duration: _hoverDuration,
+      builder: (context, hover, content) => Container(
+        width: size.width,
+        height: size.height,
+        padding: const EdgeInsets.all(_border),
+        decoration: BoxDecoration(
+          color: panelLerpColor(c.input, litTrack, hover),
+          borderRadius: pill,
+        ),
+        child: content,
       ),
       child: Stack(
         children: [

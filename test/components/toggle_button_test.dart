@@ -419,13 +419,65 @@ void main() {
 
     await mouse.moveTo(tester.getCenter(find.text('Soft')));
     await tester.pump();
-    expect(fill('Soft'), c.secondary.withValues(alpha: c.secondary.a * 0.8));
+    // The web button's 150ms fade: halfway, neither colour.
+    final soft = c.secondary.withValues(alpha: c.secondary.a * 0.8);
+    await tester.pump(const Duration(milliseconds: 75));
+    expect(fill('Soft'), isNot(anyOf(c.secondary, soft)));
+    await tester.pumpAndSettle();
+    expect(fill('Soft'), soft);
     expect(text('Soft'), c.mutedForeground);
 
     await mouse.moveTo(tester.getCenter(find.text('Ghost')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(fill('Ghost'), c.accent);
     expect(text('Ghost'), c.accentForeground);
+  });
+
+  testWidgets('chosen under the pointer, it takes the accent at once', (
+    tester,
+  ) async {
+    const c = PanelColors.panelLight;
+    var on = false;
+    await tester.pumpWidget(
+      wrap(
+        StatefulBuilder(
+          builder: (context, setState) => PanelToggleButton(
+            value: on,
+            onChanged: (value) => setState(() => on = value),
+            child: const Text('Bold'),
+          ),
+        ),
+      ),
+    );
+    Color? fill() =>
+        (tester
+                    .widget<Container>(
+                      find
+                          .ancestor(
+                            of: find.text('Bold'),
+                            matching: find.byType(Container),
+                          )
+                          .first,
+                    )
+                    .decoration!
+                as BoxDecoration)
+            .color;
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('Bold')));
+    await tester.pumpAndSettle();
+    // Only the hover eases; the selection lands in one frame, as in PanelUI.
+    await tester.tap(find.text('Bold'));
+    await tester.pump();
+    expect(fill(), c.accent);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('labels take the line height of their step', (tester) async {

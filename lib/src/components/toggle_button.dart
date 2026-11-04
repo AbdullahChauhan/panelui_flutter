@@ -3,7 +3,9 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_hover_fade.dart';
 import '../foundation/panel_pressable.dart';
+import '../theme/panel_color_mix.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 
@@ -387,7 +389,8 @@ class _ToggleGroupScope extends InheritedWidget {
 /// What a toggle draws: the fill, the faint primary edge it takes when
 /// selected, and its content in the colour that reads against the fill.
 ///
-/// Every change lands at once, as in PanelUI, where none of it is animated.
+/// Selection lands at once, as in PanelUI, where none of it is animated. The
+/// hover, from PanelUI's web button, eases in and out over its 150ms.
 class _ToggleFace extends StatelessWidget {
   const _ToggleFace({
     required this.metrics,
@@ -416,63 +419,68 @@ class _ToggleFace extends StatelessWidget {
     final theme = PanelTheme.of(context);
     final c = theme.colors;
     const clear = Color(0x00000000);
-    final Color fill;
-    final Color foreground;
-    if (selected) {
-      fill = c.accent;
-      foreground = c.accentForeground;
-    } else if (hovered && ghost) {
-      // The web button's ghost hover: `bg-accent text-accent-foreground`.
-      fill = c.accent;
-      foreground = c.accentForeground;
-    } else if (hovered) {
-      // The web button's secondary hover: `bg-secondary/80`.
-      fill = c.secondary.withValues(alpha: c.secondary.a * 0.8);
-      foreground = c.mutedForeground;
-    } else {
-      fill = ghost ? clear : c.secondary;
-      foreground = c.mutedForeground;
-    }
+    // Under the pointer, the web button's ghost hover (`bg-accent
+    // text-accent-foreground`) or its secondary one (`bg-secondary/80`).
+    final (restFill, hoverFill, hoverForeground) = ghost
+        ? (clear, c.accent, c.accentForeground)
+        : (
+            c.secondary,
+            c.secondary.withValues(alpha: c.secondary.a * 0.8),
+            c.mutedForeground,
+          );
 
-    return Container(
-      height: metrics.height,
-      width: iconOnly ? metrics.height : null,
-      padding: iconOnly
-          ? null
-          : EdgeInsets.symmetric(horizontal: metrics.padding),
-      decoration: BoxDecoration(
-        color: fill,
-        border: Border.all(
-          // `border-primary/24` when selected, `border-transparent` at rest.
-          color: selected
-              ? c.primary.withValues(alpha: c.primary.a * 0.24)
-              : clear,
-        ),
-        borderRadius: radius,
-      ),
-      child: Center(
-        widthFactor: iconOnly ? null : 1,
-        heightFactor: 1,
-        child: IconTheme(
-          data: IconThemeData(color: foreground, size: metrics.iconSize),
-          child: DefaultTextStyle(
-            style: theme.typography.style(
-              metrics.text,
-              weight: FontWeight.w500,
-              color: foreground,
+    return PanelHoverFade(
+      hovered: hovered,
+      builder: (context, hover, content) {
+        final fill = selected
+            ? c.accent
+            : panelLerpColor(restFill, hoverFill, hover);
+        final foreground = selected
+            ? c.accentForeground
+            : panelLerpColor(c.mutedForeground, hoverForeground, hover);
+        return Container(
+          height: metrics.height,
+          width: iconOnly ? metrics.height : null,
+          padding: iconOnly
+              ? null
+              : EdgeInsets.symmetric(horizontal: metrics.padding),
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(
+              // `border-primary/24` when selected, `border-transparent` at
+              // rest.
+              color: selected
+                  ? c.primary.withValues(alpha: c.primary.a * 0.24)
+                  : clear,
             ),
-            textAlign: TextAlign.center,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: metrics.gap,
-              children: [
-                ?leading,
-                if (label != null) Flexible(child: label!),
-                ?trailing,
-              ],
+            borderRadius: radius,
+          ),
+          child: Center(
+            widthFactor: iconOnly ? null : 1,
+            heightFactor: 1,
+            child: IconTheme(
+              data: IconThemeData(color: foreground, size: metrics.iconSize),
+              child: DefaultTextStyle(
+                style: theme.typography.style(
+                  metrics.text,
+                  weight: FontWeight.w500,
+                  color: foreground,
+                ),
+                textAlign: TextAlign.center,
+                child: content!,
+              ),
             ),
           ),
-        ),
+        );
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: metrics.gap,
+        children: [
+          ?leading,
+          if (label != null) Flexible(child: label!),
+          ?trailing,
+        ],
       ),
     );
   }

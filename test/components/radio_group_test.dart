@@ -445,8 +445,13 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.moveTo(tester.getCenter(find.text('Pro')));
     await tester.pump();
-    // `color-mix(in oklab, input, foreground 25%)`.
+    await tester.pump(const Duration(milliseconds: 100));
+    final midway = ring('Pro');
+    await tester.pumpAndSettle();
+    // `color-mix(in oklab, input, foreground 25%)`, after the web package's
+    // 200ms fade, which halfway is on neither colour.
     final lit = ring('Pro');
+    expect(midway, isNot(anyOf(PanelColors.panelLight.input, lit)));
     expect(lit.a, closeTo(0.32647, 0.002));
     expect(lit.r * 255, closeTo(23.24, 0.5));
     expect(lit.g, closeTo(lit.r, 1e-6));
@@ -454,6 +459,54 @@ void main() {
     await mouse.moveTo(tester.getCenter(find.text('Free')));
     await tester.pump();
     expect(ring('Free'), PanelColors.panelLight.input);
+  });
+
+  testWidgets("a card's edge darkens under the pointer, and turns primary "
+      'at once when chosen', (tester) async {
+    const c = PanelColors.panelLight;
+    await tester.pumpWidget(
+      wrap(
+        const SizedBox(
+          width: 360,
+          child: _Plans(initial: 'Free', variant: PanelRadioVariant.card),
+        ),
+      ),
+    );
+    Color edge(String label) {
+      final card = tester.widget<Container>(
+        find
+            .ancestor(
+              of: find.text('$label plan'),
+              matching: find.byType(Container),
+            )
+            .last,
+      );
+      return ((card.decoration! as BoxDecoration).border! as Border).top.color;
+    }
+
+    final lit = c.border.mixOklab(c.foreground, 0.18);
+    expect(edge('Pro'), c.border);
+    // Hover shows where a mouse is the pointer, as on the web and desktop.
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('Pro plan')));
+    await tester.pump();
+    // Halfway through the web package's 200ms fade, it is neither colour.
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(edge('Pro'), isNot(anyOf(c.border, lit)));
+    await tester.pumpAndSettle();
+    expect(edge('Pro'), lit);
+    await tester.tap(find.text('Pro plan'));
+    await tester.pump();
+    expect(edge('Pro'), c.primary);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('keyboard focus rings the disc 2pt off it, as the web does', (

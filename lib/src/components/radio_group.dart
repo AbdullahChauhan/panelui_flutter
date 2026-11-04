@@ -1,9 +1,10 @@
 import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_focus_ring.dart';
+import '../foundation/panel_hover_fade.dart';
 import '../foundation/panel_pressable.dart';
-import '../theme/panel_motion.dart';
 import '../theme/panel_color_mix.dart';
+import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 
@@ -214,6 +215,10 @@ const BoxConstraints _target = BoxConstraints(minHeight: 48, minWidth: 48);
 
 /// PanelUI's `opacity-50` on a disabled option.
 const double _disabledOpacity = 0.5;
+
+/// How long a disc's ring or a card's edge takes to darken under the
+/// pointer: the web package's `duration-200`.
+const Duration _hoverDuration = Duration(milliseconds: 200);
 
 /// A Tailwind text class: a step on the type scale, or a bare
 /// `text-[13px]` that keeps the font's own line height.
@@ -548,25 +553,28 @@ class _RadioCard extends StatelessWidget {
     final theme = PanelTheme.of(context);
     final c = theme.colors;
     final radius = BorderRadius.circular(theme.radii.xl);
-    final Color border;
-    if (selected) {
-      border = c.primary;
-    } else if (hovered) {
-      // The web package's card hover.
-      border = c.border.mixOklab(c.foreground, 0.18);
-    } else {
-      border = c.border;
-    }
+    // The web package's card hover, eased over its `duration-200`.
+    final litBorder = c.border.mixOklab(c.foreground, 0.18);
     // PanelUI's card: `p-4`, `gap-3` before the disc, `gap-1` in the text.
-    final card = Container(
-      constraints: _target,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        // PanelUI swaps the card fill for the accent tint outright, so the
-        // tint is laid over whatever the card sits on.
-        color: selected ? c.accent : c.card,
-        border: Border.all(color: border),
-        borderRadius: radius,
+    final card = PanelHoverFade(
+      hovered: hovered,
+      duration: _hoverDuration,
+      builder: (context, hover, content) => Container(
+        constraints: _target,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          // PanelUI swaps the card fill for the accent tint outright, so the
+          // tint is laid over whatever the card sits on. The primary edge
+          // lands at once with it.
+          color: selected ? c.accent : c.card,
+          border: Border.all(
+            color: selected
+                ? c.primary
+                : panelLerpColor(c.border, litBorder, hover),
+          ),
+          borderRadius: radius,
+        ),
+        child: content,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -614,18 +622,22 @@ class _RadioDisc extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = PanelTheme.of(context).colors;
-    final disc = Container(
-      width: metrics.disc,
-      height: metrics.disc,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: c.background,
-        shape: BoxShape.circle,
-        border: Border.all(
-          // The web package's hover: the ring a quarter of the way to the
-          // foreground.
-          color: hovered ? c.input.mixOklab(c.foreground, 0.25) : c.input,
+    // The web package's hover: the ring a quarter of the way to the
+    // foreground, over its `duration-200`.
+    final litRing = c.input.mixOklab(c.foreground, 0.25);
+    final disc = PanelHoverFade(
+      hovered: hovered,
+      duration: _hoverDuration,
+      builder: (context, hover, content) => Container(
+        width: metrics.disc,
+        height: metrics.disc,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: c.background,
+          shape: BoxShape.circle,
+          border: Border.all(color: panelLerpColor(c.input, litRing, hover)),
         ),
+        child: content,
       ),
       child: FadeTransition(
         opacity: dot,

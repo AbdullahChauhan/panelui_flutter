@@ -11,6 +11,7 @@ import '../foundation/overlay_capture.dart';
 import '../foundation/overlay_scrim.dart';
 import '../foundation/panel_decoration.dart';
 import '../foundation/panel_focus_ring.dart';
+import '../foundation/panel_hover_fade.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
@@ -1037,7 +1038,7 @@ class _SheetCloseButton extends StatelessWidget {
     // default ease, and none under reduced motion.
     final hoverDuration = panelReduceMotion(context)
         ? Duration.zero
-        : const Duration(milliseconds: 150);
+        : PanelDurations.hover;
     return PanelPressable(
       onPressed: onPressed,
       pressScale: 1,
@@ -1048,10 +1049,9 @@ class _SheetCloseButton extends StatelessWidget {
       focusRingStyle: PanelFocusRingStyle.tight,
       builder: (context, state) => Opacity(
         opacity: state.pressed ? 0.7 : 1,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: state.hovered ? 1 : 0),
+        child: PanelHoverFade(
+          hovered: state.hovered,
           duration: hoverDuration,
-          curve: Curves.fastOutSlowIn,
           builder: (context, hover, _) => Container(
             width: 32,
             height: 32,

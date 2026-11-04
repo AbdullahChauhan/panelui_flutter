@@ -304,11 +304,16 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.moveTo(tester.getCenter(find.text('Design')));
     await tester.pump();
-    // The web package's `hover:bg-muted/60`.
-    expect(
-      fill('Design'),
-      Color.alphaBlend(c.muted.withValues(alpha: c.muted.a * 0.6), c.secondary),
+    // The web package's `hover:bg-muted/60`, eased over its 200ms: halfway,
+    // neither colour.
+    final tinted = Color.alphaBlend(
+      c.muted.withValues(alpha: c.muted.a * 0.6),
+      c.secondary,
     );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(fill('Design'), isNot(anyOf(c.secondary, tinted)));
+    await tester.pumpAndSettle();
+    expect(fill('Design'), tinted);
     await mouse.moveTo(tester.getCenter(find.text('Code')));
     await tester.pump();
     expect(fill('Code'), c.accent);

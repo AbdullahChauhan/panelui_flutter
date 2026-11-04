@@ -1,11 +1,13 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../foundation/panel_hit_slop.dart';
 import '../foundation/panel_focus_ring.dart';
+import '../foundation/panel_hit_slop.dart';
+import '../foundation/panel_hover_fade.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
+import '../theme/panel_color_mix.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_tokens.dart';
 import '../theme/panel_typography.dart';
@@ -208,6 +210,10 @@ class PanelChip extends StatelessWidget {
 /// PanelUI's `opacity-[0.56]` on a disabled chip.
 const double _disabledOpacity = 0.56;
 
+/// How long the pill takes to tint under the pointer: the web package's
+/// `duration-200`.
+const Duration _hoverDuration = Duration(milliseconds: 200);
+
 class _ChipMetrics {
   const _ChipMetrics({
     required this.height,
@@ -368,18 +374,23 @@ class _ChipPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     final radius = BorderRadius.circular(metrics.height / 2);
-    final pill = Container(
-      height: metrics.height,
-      // The ✕ hugs the end edge: PanelUI trims the end padding to 4 and pulls
-      // the ✕ out by the same 4.
-      padding: EdgeInsetsDirectional.only(
-        start: metrics.padding,
-        end: close == null ? metrics.padding : 0,
-      ),
-      decoration: BoxDecoration(
-        color: hovered ? palette.hoverFill : palette.fill,
-        border: Border.all(color: palette.border),
-        borderRadius: radius,
+    final pill = PanelHoverFade(
+      hovered: hovered,
+      duration: _hoverDuration,
+      builder: (context, hover, content) => Container(
+        height: metrics.height,
+        // The ✕ hugs the end edge: PanelUI trims the end padding to 4 and
+        // pulls the ✕ out by the same 4.
+        padding: EdgeInsetsDirectional.only(
+          start: metrics.padding,
+          end: close == null ? metrics.padding : 0,
+        ),
+        decoration: BoxDecoration(
+          color: panelLerpColor(palette.fill, palette.hoverFill, hover),
+          border: Border.all(color: palette.border),
+          borderRadius: radius,
+        ),
+        child: content,
       ),
       child: IconTheme(
         data: IconThemeData(color: palette.foreground, size: metrics.fontSize),

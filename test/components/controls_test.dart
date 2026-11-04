@@ -171,7 +171,9 @@ void main() {
       );
     });
 
-    testWidgets('a pointer over it darkens the track', (tester) async {
+    testWidgets('a pointer over it darkens the track over 200ms', (
+      tester,
+    ) async {
       _useTraditionalHighlights();
       await tester.pumpWidget(
         wrap(PanelSwitch(value: false, onChanged: (_) {})),
@@ -181,9 +183,14 @@ void main() {
         find.byType(PanelSwitch),
         (d) => d.color == color,
       ).isNotEmpty;
+      final lit = _light.input.mixOklab(_light.foreground, 0.08);
       expect(trackIs(_light.input), isTrue);
       await _hover(tester, find.byType(PanelSwitch));
-      expect(trackIs(_light.input.mixOklab(_light.foreground, 0.08)), isTrue);
+      // Halfway through the web package's fade, it is neither colour.
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(trackIs(_light.input) || trackIs(lit), isFalse);
+      await tester.pumpAndSettle();
+      expect(trackIs(lit), isTrue);
     });
 
     testWidgets('keyboard focus draws a ring clear of the track', (
@@ -352,7 +359,9 @@ void main() {
       expect((card.border! as Border).top.color, _light.primary);
     });
 
-    testWidgets('a pointer over it darkens the box edge', (tester) async {
+    testWidgets('a pointer over it darkens the box edge over 150ms', (
+      tester,
+    ) async {
       _useTraditionalHighlights();
       await tester.pumpWidget(
         wrap(PanelCheckbox(value: false, label: 'A', onChanged: (_) {})),
@@ -362,9 +371,14 @@ void main() {
         find.byType(PanelCheckbox),
         (d) => d.border is Border && (d.border! as Border).top.color == color,
       ).isNotEmpty;
+      final lit = _light.input.mixOklab(_light.foreground, 0.25);
       expect(edgeIs(_light.input), isTrue);
       await _hover(tester, find.byType(PanelCheckbox));
-      expect(edgeIs(_light.input.mixOklab(_light.foreground, 0.25)), isTrue);
+      // Halfway through the web package's fade, it is neither colour.
+      await tester.pump(const Duration(milliseconds: 75));
+      expect(edgeIs(_light.input) || edgeIs(lit), isFalse);
+      await tester.pumpAndSettle();
+      expect(edgeIs(lit), isTrue);
     });
 
     testWidgets('builds both variants in every theme', (tester) async {

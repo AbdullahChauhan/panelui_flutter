@@ -13,6 +13,10 @@
   `PanelBoxDecoration`, `PanelShapeDecoration` and `paintPanelShadows`.
 - The checkbox and switch hover colours mix in Oklab, as the web package's
   `color-mix(in oklab, …)` does.
+- The checkbox, switch, radio, chip and toggle button now ease into and out
+  of their hover look over the web package's 150–200ms, rather than
+  switching at once. Selection still lands at once, as in PanelUI. Added
+  `PanelHoverFade`.
 - Gallery: the sidebar keeps its scroll position when a page opens.
 
 ## 0.1.0
