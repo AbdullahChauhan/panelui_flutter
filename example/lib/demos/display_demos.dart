@@ -275,6 +275,7 @@ class _BadgeDemo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = PanelTheme.of(context).colors;
     return DemoStack(
       children: [
         DemoGroup(
@@ -288,22 +289,49 @@ class _BadgeDemo extends StatelessWidget {
           label: 'Sizes',
           children: [
             for (final size in PanelBadgeSize.values)
-              PanelBadge(
-                size: size,
-                variant: PanelBadgeVariant.secondary,
-                child: Text(size.name),
-              ),
+              PanelBadge(size: size, child: Text(size.name)),
           ],
         ),
-        const DemoGroup(
+        DemoGroup(
           label: 'Counts and dots',
           children: [
-            PanelBadge.count(3),
-            PanelBadge.count(42, variant: PanelBadgeVariant.destructive),
-            PanelBadge.count(128, variant: PanelBadgeVariant.secondary),
-            PanelBadge.dot(variant: PanelBadgeVariant.success),
-            PanelBadge.dot(variant: PanelBadgeVariant.warning),
-            PanelBadge.dot(variant: PanelBadgeVariant.destructive),
+            for (final size in PanelBadgeSize.values)
+              PanelBadge.count(3, size: size),
+            const PanelBadge.count(128, variant: PanelBadgeVariant.destructive),
+            for (final size in PanelBadgeSize.values)
+              PanelBadge.dot(size: size, variant: PanelBadgeVariant.success),
+          ],
+        ),
+        DemoGroup(
+          label: 'With a status dot',
+          children: [
+            for (final (variant, dot, text) in [
+              (PanelBadgeVariant.success, c.success, 'Operational'),
+              (PanelBadgeVariant.warning, c.warning, 'Degraded'),
+              (PanelBadgeVariant.info, c.info, 'Maintenance'),
+            ])
+              PanelBadge(
+                variant: variant,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 4,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: dot,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    PanelText(
+                      text,
+                      size: PanelTextSize.xs,
+                      weight: FontWeight.w500,
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ],
@@ -456,6 +484,21 @@ class _TypographyDemo extends StatelessWidget {
             PanelCode('flutter pub add panelui_flutter'),
           ],
         ),
+        PanelText.h4('Marks'),
+        PanelText(
+          'Terms of service',
+          style: TextStyle(decoration: TextDecoration.underline),
+        ),
+        PanelText(
+          'An aside, in passing.',
+          style: TextStyle(fontStyle: FontStyle.italic),
+        ),
+        PanelText(
+          '£24.00',
+          muted: true,
+          style: TextStyle(decoration: TextDecoration.lineThrough),
+        ),
+        PanelText('SECTION LABEL', size: PanelTextSize.xs, muted: true),
       ],
     );
   }
@@ -558,11 +601,11 @@ class _MeterDemo extends StatefulWidget {
 }
 
 class _MeterDemoState extends State<_MeterDemo> {
-  double _storage = 212;
+  double _storage = 168;
 
   static const _storageThresholds = [
-    PanelMeterThreshold(from: 192, color: PanelMeterColor.warning),
-    PanelMeterThreshold(from: 240, color: PanelMeterColor.destructive),
+    PanelMeterThreshold(from: 180, color: PanelMeterColor.warning),
+    PanelMeterThreshold(from: 230, color: PanelMeterColor.destructive),
   ];
 
   @override
@@ -574,37 +617,32 @@ class _MeterDemoState extends State<_MeterDemo> {
           child: Column(
             spacing: 20,
             children: [
-              PanelMeter(
-                label: 'Storage',
-                value: _storage,
-                max: 256,
-                valueLabel: '${_storage.round()} of 256 GB',
-                thresholds: _storageThresholds,
-              ),
               const PanelMeter(
                 label: 'Battery',
                 value: 18,
-                color: PanelMeterColor.success,
+                showValueLabel: true,
                 thresholds: [
                   PanelMeterThreshold(
                     from: 0,
                     color: PanelMeterColor.destructive,
                   ),
-                  PanelMeterThreshold(from: 20, color: PanelMeterColor.success),
+                  PanelMeterThreshold(from: 20, color: PanelMeterColor.warning),
+                  PanelMeterThreshold(from: 50, color: PanelMeterColor.success),
                 ],
               ),
-              const PanelMeter(
-                label: 'Password strength',
-                value: 3,
-                max: 4,
-                segments: 4,
-                valueLabel: 'Strong',
+              PanelMeter(
+                label: 'Storage',
+                value: _storage,
+                max: 256,
+                showValueLabel: true,
+                formatValue: (gb) => '${gb.round()} GB',
                 color: PanelMeterColor.success,
+                thresholds: _storageThresholds,
               ),
               Row(
                 spacing: 8,
                 children: [
-                  for (final gb in [64.0, 212.0, 248.0])
+                  for (final gb in [64.0, 168.0, 248.0])
                     PanelButton(
                       size: PanelButtonSize.xs,
                       variant: PanelButtonVariant.outline,
@@ -612,6 +650,31 @@ class _MeterDemoState extends State<_MeterDemo> {
                       child: Text('${gb.round()} GB'),
                     ),
                 ],
+              ),
+              const PanelMeter(
+                label: 'Password strength',
+                value: 3,
+                max: 4,
+                segments: 4,
+                showValueLabel: true,
+                valueLabel: 'Good',
+                thresholds: [
+                  PanelMeterThreshold(
+                    from: 0,
+                    color: PanelMeterColor.destructive,
+                  ),
+                  PanelMeterThreshold(from: 2, color: PanelMeterColor.warning),
+                  PanelMeterThreshold(from: 3, color: PanelMeterColor.success),
+                ],
+              ),
+              const PanelMeter(
+                label: 'Signal',
+                value: 3,
+                max: 5,
+                segments: 5,
+                showValueLabel: true,
+                valueLabel: '3 of 5 bars',
+                color: PanelMeterColor.info,
               ),
             ],
           ),
