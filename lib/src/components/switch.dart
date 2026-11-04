@@ -6,6 +6,9 @@ import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 
 /// How big a [PanelSwitch] is.
+///
+/// Each track is its thumb plus 3pt of padding and a 1pt border on either
+/// side, and about twice as wide as it is tall.
 enum PanelSwitchSize {
   /// A 32 × 20 track.
   xs(32, 20, 12),
@@ -33,12 +36,14 @@ enum PanelSwitchSize {
   /// Thumb diameter.
   final double thumb;
 
-  /// How far the thumb travels: the width left once the thumb, 3pt of
-  /// padding and a 1pt border on either side are taken out.
-  double get travel => width - thumb - 8;
+  /// How far the thumb travels: what is left of the track's width once the
+  /// thumb, the padding and the border on either side are taken out.
+  double get travel => width - thumb - 2 * (_padding + _border);
 
-  /// Room around the track that also takes a press, so the target nears 48pt
-  /// on both axes without the switch standing 48pt tall in every row.
+  /// Room around the track that also takes a press, so the target reaches
+  /// 48pt on both axes without the switch standing 48pt tall in every row.
+  /// From `md` up the track is already 48pt wide, which is why only the two
+  /// smallest have horizontal room.
   EdgeInsets get hitSlop => switch (this) {
     xs => const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
     sm => const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -51,12 +56,15 @@ enum PanelSwitchSize {
 /// An on/off switch.
 ///
 /// The thumb springs across the track while the `primary` fill fades in
-/// beneath it, both on one animation, so a flip never rebuilds more than the
-/// switch itself.
+/// beneath it, both on one animation, so a flip rebuilds nothing but the
+/// thumb's offset.
 ///
 /// ```dart
 /// PanelSwitch(value: wifi, onChanged: (v) => setState(() => wifi = v))
 /// ```
+///
+/// PanelUI's `native` mode, which hands the control to the platform, is
+/// Flutter's own `Switch.adaptive`.
 class PanelSwitch extends StatefulWidget {
   /// Creates a switch.
   const PanelSwitch({
@@ -65,6 +73,7 @@ class PanelSwitch extends StatefulWidget {
     required this.onChanged,
     this.size = PanelSwitchSize.md,
     this.semanticLabel,
+    this.semanticHint,
     this.haptics = false,
     this.focusNode,
     this.autofocus = false,
@@ -82,7 +91,11 @@ class PanelSwitch extends StatefulWidget {
   /// The accessible name.
   final String? semanticLabel;
 
-  /// Tick the haptic engine on each flip.
+  /// An accessible hint, such as what the setting does.
+  final String? semanticHint;
+
+  /// Tick the haptic engine on each flip: a toggle you feel click rather than
+  /// one that only slides.
   final bool haptics;
 
   /// An optional focus node.
@@ -97,6 +110,7 @@ class PanelSwitch extends StatefulWidget {
 
 class _PanelSwitchState extends State<PanelSwitch>
     with SingleTickerProviderStateMixin {
+  // Unbounded so the spring's overshoot is drawn rather than clamped away.
   late final AnimationController _progress = AnimationController.unbounded(
     vsync: this,
     value: widget.value ? 1 : 0,
@@ -127,66 +141,130 @@ class _PanelSwitchState extends State<PanelSwitch>
 
   @override
   Widget build(BuildContext context) {
-    final theme = PanelTheme.of(context);
-    final c = theme.colors;
-    final size = widget.size;
     final enabled = widget.onChanged != null;
-    final rtl = Directionality.of(context) == TextDirection.rtl;
-
-    final track = AnimatedBuilder(
-      animation: _progress,
-      builder: (context, _) {
-        final t = _progress.value;
-        return Container(
-          width: size.width,
-          height: size.height,
-          decoration: BoxDecoration(
-            color: c.input,
-            borderRadius: BorderRadius.circular(size.height / 2),
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Opacity(
-                  opacity: t.clamp(0.0, 1.0),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: c.primary,
-                      borderRadius: BorderRadius.circular(size.height / 2),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 4,
-                left: 4 + (rtl ? (1 - t) : t) * size.travel,
-                child: Container(
-                  width: size.thumb,
-                  height: size.thumb,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFFFFF),
-                    shape: BoxShape.circle,
-                    boxShadow: theme.shadows.sm,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-
     return PanelPressable(
       onPressed: enabled ? _toggle : null,
+      // PanelUI draws a switch on a plain Pressable: no press shrink.
       pressScale: 1,
       isButton: false,
       toggled: widget.value,
       semanticLabel: widget.semanticLabel,
+      semanticHint: widget.semanticHint,
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
-      focusRingRadius: BorderRadius.circular(size.height / 2),
-      hitSlop: size.hitSlop,
-      child: Opacity(opacity: enabled ? 1 : 0.5, child: track),
+      hitSlop: widget.size.hitSlop,
+      builder: (context, state) => Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: _SwitchTrack(
+          size: widget.size,
+          progress: _progress,
+          hovered: state.hovered,
+          focused: state.focused,
+        ),
+      ),
     );
   }
 }
+
+/// The track's border: transparent, so the track colour rings the fill.
+const double _border = 1;
+
+/// The space between the track's border and the thumb (`p-[3px]`).
+const double _padding = 3;
+
+/// The track, its fill and the thumb, drawn at [progress] from off (0) to on
+/// (1).
+class _SwitchTrack extends StatelessWidget {
+  const _SwitchTrack({
+    required this.size,
+    required this.progress,
+    required this.hovered,
+    required this.focused,
+  });
+
+  final PanelSwitchSize size;
+  final Animation<double> progress;
+  final bool hovered;
+  final bool focused;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    final pill = BorderRadius.circular(size.height / 2);
+    // The track is laid out mirrored in a right-to-left row, but an offset is
+    // not, so "on" would otherwise still be on the right.
+    final direction = Directionality.of(context) == TextDirection.rtl ? -1 : 1;
+
+    final thumb = Container(
+      width: size.thumb,
+      height: size.thumb,
+      decoration: BoxDecoration(
+        // PanelUI's `bg-white`: the thumb is white in every theme.
+        color: const Color(0xFFFFFFFF),
+        shape: BoxShape.circle,
+        boxShadow: theme.shadows.sm,
+      ),
+    );
+
+    Widget track = Container(
+      width: size.width,
+      height: size.height,
+      padding: const EdgeInsets.all(_border),
+      decoration: BoxDecoration(
+        // The web package's hover: the track darkens 8% of the way towards
+        // the foreground.
+        color: hovered ? Color.lerp(c.input, c.foreground, 0.08) : c.input,
+        borderRadius: pill,
+      ),
+      child: Stack(
+        children: [
+          // Inside the transparent border, so the track colour rings it.
+          Positioned.fill(
+            child: FadeTransition(
+              opacity: progress,
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: c.primary, borderRadius: pill),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(_padding),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: AnimatedBuilder(
+                animation: progress,
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(direction * progress.value * size.travel, 0),
+                  child: child,
+                ),
+                child: thumb,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (focused) {
+      track = DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: pill,
+          border: _focusRing(c.ring),
+        ),
+        child: track,
+      );
+    }
+    return track;
+  }
+}
+
+/// The web package's keyboard focus ring (`ring-2 ring-ring ring-offset-2`):
+/// 2pt of [color] standing 2pt clear of the control. The gap is left
+/// see-through rather than painted in the page colour.
+Border _focusRing(Color color) => Border.all(
+  color: color,
+  width: 2,
+  // Outside the edge and past the gap: from 2pt to 4pt out.
+  strokeAlign: 3,
+);

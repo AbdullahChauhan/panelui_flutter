@@ -43,7 +43,7 @@ void main() {
       expect(find.text('•'), findsNWidgets(2));
     });
 
-    testWidgets('a single error is a plain line', (tester) async {
+    testWidgets('a single error is a plain line, announced', (tester) async {
       await tester.pumpWidget(
         wrap(
           const PanelField(
@@ -54,6 +54,85 @@ void main() {
         ),
       );
       expect(find.text('•'), findsNothing);
+      expect(
+        tester.getSemantics(find.text('Required.')),
+        isSemantics(label: 'Required.', isLiveRegion: true),
+      );
+    });
+
+    testWidgets('empty validator results are not errors', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          const PanelField(
+            label: 'Email',
+            errors: [null, ''],
+            child: PanelInput(),
+          ),
+        ),
+      );
+      expect(find.byType(PanelFieldError), findsNothing);
+      final label = tester.widget<PanelLabel>(find.byType(PanelLabel));
+      expect(label.isInvalid, isFalse);
+    });
+
+    testWidgets('a vertical field stacks its label, title and control', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(
+          const PanelField(
+            label: 'Name',
+            title: 'Your details',
+            description: 'As it appears on your card.',
+            child: PanelInput(),
+          ),
+        ),
+      );
+      final label = tester.getRect(find.text('Name'));
+      final title = tester.getRect(find.text('Your details'));
+      final input = tester.getRect(find.byType(PanelInput));
+      final description = tester.getRect(
+        find.text('As it appears on your card.'),
+      );
+      expect(title.top - label.bottom, 8);
+      expect(input.top - title.bottom, 8);
+      expect(description.top - input.bottom, 8);
+    });
+
+    testWidgets('a disabled field dims, and its label with it', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          const PanelField(
+            label: 'Plan',
+            isDisabled: true,
+            child: PanelInput(enabled: false),
+          ),
+        ),
+      );
+      expect(tester.widget<Opacity>(find.byType(Opacity).first).opacity, 0.64);
+      expect(
+        tester.widget<PanelLabel>(find.byType(PanelLabel).first).isDisabled,
+        isTrue,
+      );
+    });
+  });
+
+  group('PanelFieldSet', () {
+    testWidgets('announces its legend as a heading', (tester) async {
+      await tester.pumpWidget(
+        wrap(
+          PanelFieldSet(
+            legend: 'Notifications',
+            children: [
+              PanelCheckbox(value: true, label: 'Email', onChanged: (_) {}),
+            ],
+          ),
+        ),
+      );
+      expect(
+        tester.getSemantics(find.text('Notifications')),
+        isSemantics(label: 'Notifications', isHeader: true),
+      );
     });
   });
 
