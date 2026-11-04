@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panelui_flutter/panelui_flutter.dart';
+import 'package:panelui_flutter/src/foundation/overlay_scrim.dart';
 
 import '../helpers.dart';
 
@@ -197,13 +198,10 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
+    // A plain line of text, as in PanelUI, that names the route.
     expect(
       tester.getSemantics(find.text('Delete project?')),
-      matchesSemantics(
-        label: 'Delete project?',
-        isHeader: true,
-        namesRoute: true,
-      ),
+      matchesSemantics(label: 'Delete project?', namesRoute: true),
     );
     expect(find.bySemanticsLabel('Close dialog'), findsOneWidget);
     final route = find.byWidgetPredicate(
@@ -271,6 +269,90 @@ void main() {
     expect(footer.left, dialog.left + 1);
     expect(footer.right, dialog.right - 1);
     expect(footer.bottom, dialog.bottom - 1);
+    // 26pt below the content: the column's gap and `mt-5`.
+    final surface = tester.getRect(
+      find.descendant(of: band, matching: find.byType(DecoratedBox)).first,
+    );
+    final description = find.text('This action cannot be undone.');
+    expect(surface.top - tester.getRect(description).bottom, 26);
+    // Its bottom corners are the dialog's own, `rounded-b-2xl`.
+    final decoration =
+        tester.widget<Container>(band).decoration! as BoxDecoration;
+    final radius = PanelThemeData.panelLight.radii.xxl;
+    expect(
+      decoration.borderRadius,
+      BorderRadius.only(
+        bottomLeft: Radius.circular(radius),
+        bottomRight: Radius.circular(radius),
+      ),
+    );
+  });
+
+  testWidgets('the scrim fades inside the layer, as a square of its fade', (
+    tester,
+  ) async {
+    await tester.pumpWidget(wrap(const _Opener()));
+    double dim() => tester
+        .widget<ColoredBox>(
+          find.descendant(
+            of: find.byType(PanelOverlayScrim),
+            matching: find.byType(ColoredBox),
+          ),
+        )
+        .color
+        .a;
+
+    // Halfway through the 150ms in, the layer and the scrim's own fade are
+    // each at half, so the 50% dim is at a quarter of itself.
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 75));
+    expect(dim(), closeTo(0.5 * 0.25, 0.01));
+    await tester.pumpAndSettle();
+    expect(dim(), closeTo(0.5, 0.001));
+
+    // And the same on the way out.
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 75));
+    expect(dim(), closeTo(0.5 * 0.25, 0.01));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('centres on the whole screen, 24pt in from its edges', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(800, 600),
+          padding: EdgeInsets.only(top: 47, bottom: 34),
+          viewPadding: EdgeInsets.only(top: 47, bottom: 34),
+        ),
+        child: wrap(const _Opener()),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byType(PanelDialog)).center.dy, 300);
+  });
+
+  testWidgets('it rises clear of the keyboard', (tester) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(800, 600),
+          viewInsets: EdgeInsets.only(bottom: 300),
+        ),
+        child: wrap(const _Opener()),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    // Centred in what the keyboard leaves, 24pt in from it.
+    final dialog = tester.getRect(find.byType(PanelDialog));
+    expect(dialog.center.dy, closeTo((600 - 300) / 2, 0.5));
+    expect(dialog.bottom, lessThanOrEqualTo(600 - 300 - 24));
   });
 
   testWidgets('is 384pt wide at most, and fills a narrower screen', (

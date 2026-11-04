@@ -112,14 +112,14 @@ void main() {
       matching: find.byType(PanelIcon),
     );
     expect(tester.getSize(glyph), const Size(14, 14));
-    expect(
-      tester.getSize(
-        find.ancestor(of: glyph, matching: find.byType(AnimatedContainer)),
-      ),
-      const Size(24, 24),
+    final circle = tester.getRect(
+      find.ancestor(of: glyph, matching: find.byType(Container)).first,
     );
+    expect(circle.size, const Size(24, 24));
 
-    await tester.tap(find.bySemanticsLabel('Dismiss notification'));
+    // Its 2pt slop reaches only as far as the 1pt wrapper it sits in, as
+    // React Native's stops at a parent's bounds: the strip above it.
+    await tester.tapAt(circle.topCenter - const Offset(0, 0.5));
     await tester.pumpAndSettle();
     expect(find.text('Pinned'), findsNothing);
     expect(toast.isShowing, isFalse);
@@ -261,15 +261,17 @@ void main() {
     await tester.pumpAndSettle();
     final rest = tester.getRect(_card('Swipe me'));
 
-    // Up, away from the bottom edge: it resists, then returns.
+    // Up, away from the bottom edge: it resists, then returns. Each move is
+    // added to where it is and the result cut to a tenth, so it settles a
+    // ninth of a move from its place however far the finger goes.
     final gesture = await tester.startGesture(rest.center);
     for (var i = 0; i < 10; i++) {
       await gesture.moveBy(const Offset(0, -40));
       await tester.pump(const Duration(milliseconds: 16));
     }
+    // Its top also comes down a little as the press shrinks it to 99.5%.
     final lifted = rest.top - tester.getRect(_card('Swipe me')).top;
-    expect(lifted, greaterThan(20));
-    expect(lifted, lessThanOrEqualTo(40));
+    expect(lifted, closeTo(40 / 9 - rest.height * 0.005 / 2, 0.1));
     await gesture.up();
     await tester.pumpAndSettle();
     expect(find.text('Swipe me'), findsOneWidget);
@@ -283,6 +285,31 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Swipe me'), findsNothing);
+  });
+
+  testWidgets('a swipe takes the touch after 12pt', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        (context) => showPanelToast(
+          context,
+          title: const Text('Swipe me'),
+          duration: Duration.zero,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Raise'));
+    await tester.pumpAndSettle();
+    final rest = tester.getRect(_card('Swipe me'));
+
+    // Past 12pt, under Flutter's own 18pt slop, and the toast follows all of
+    // it.
+    final gesture = await tester.startGesture(rest.center);
+    await gesture.moveBy(const Offset(0, 14));
+    await tester.pump();
+    expect(tester.getRect(_card('Swipe me')).top, closeTo(rest.top + 14, 0.2));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(tester.getRect(_card('Swipe me')).top, closeTo(rest.top, 0.5));
   });
 
   testWidgets('a top toast hangs from the top and is swiped up', (
@@ -478,6 +505,73 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
     expect(find.byType(PanelToast), findsNothing);
+  });
+
+  testWidgets('the deck gathers as it spread, on an ease-out', (tester) async {
+    await tester.pumpWidget(
+      _app((context) {
+        for (final title in ['Alpha', 'Beta']) {
+          showPanelToast(context, title: Text(title), duration: Duration.zero);
+        }
+      }),
+    );
+    await tester.tap(find.text('Raise'));
+    await tester.pumpAndSettle();
+    final gathered = tester.getRect(_card('Alpha')).top;
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1, 1));
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(_card('Beta')));
+    await tester.pumpAndSettle();
+    final spread = tester.getRect(_card('Alpha')).top;
+
+    // A quarter of the way through the 450ms, most of the way back: the
+    // web's transition runs forward in time whichever way it goes.
+    await mouse.moveTo(const Offset(1, 1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 112));
+    final now = tester.getRect(_card('Alpha')).top;
+    expect((now - spread) / (gathered - spread), greaterThan(0.6));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(_card('Alpha')).top, closeTo(gathered, 0.5));
+    hideAllPanelToasts(tester.element(find.text('Raise')));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the close button takes its hover at once', (tester) async {
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
+    await tester.pumpWidget(
+      _app(
+        (context) => showPanelToast(
+          context,
+          title: const Text('Hover'),
+          duration: Duration.zero,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Raise'));
+    await tester.pumpAndSettle();
+    final close = find.bySemanticsLabel('Dismiss notification');
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1, 1));
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(close));
+    await tester.pump();
+    final circle = tester.widget<Container>(
+      find.descendant(of: close, matching: find.byType(Container)).first,
+    );
+    expect(
+      (circle.decoration! as BoxDecoration).color,
+      PanelColors.panelLight.accent,
+    );
+    hideAllPanelToasts(tester.element(find.text('Raise')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('cards keep their state as the deck spreads and gathers', (

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' show Material, MaterialType;
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
@@ -14,14 +15,25 @@ import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
-import '../theme/panel_tokens.dart';
 import '../theme/panel_typography.dart';
 import 'button.dart';
+
+/// How far a toast travels on entry and on exit.
+const double _enterOffset = 100;
 
 /// The departure: the way it came, a little quicker, on an ease-out, so the
 /// first frames of the exit already move.
 const Duration _exitDuration = Duration(milliseconds: 240);
 const Curve _exitCurve = Cubic(0.23, 1, 0.32, 1);
+
+/// Scale of a toast while a finger is on it, reached over 120ms.
+const double _pressScale = 0.995;
+const Duration _pressDuration = Duration(milliseconds: 120);
+
+/// How far a finger travels before a swipe takes the touch, PanelUI's
+/// `activeOffsetY([-12, 12])`: a press on the action or the close button
+/// under it is cancelled from then on.
+const double _swipeSlop = 12;
 
 /// Drag distance past which a release dismisses.
 const double _dismissDistance = 50;
@@ -30,12 +42,12 @@ const double _dismissDistance = 50;
 const double _dismissVelocity = 500;
 
 /// How far a toast can be dragged away from its edge before it stops moving,
-/// and over how much finger travel it gets there.
+/// and over how much travel it gets there.
 const double _rubberBandLimit = 40;
 const double _rubberBandTravel = 400;
 
-/// How far a toast travels on entry and on exit.
-const double _enterOffset = 100;
+/// Reanimated's default decay rate (0.998 per millisecond), per second.
+final double _decayDrag = math.pow(0.998, 1000).toDouble();
 
 /// The newest toasts at each edge; the one behind them fades out rather
 /// than stacking off-screen.
@@ -51,11 +63,16 @@ const double _stackScaleStep = 0.97;
 const double _spreadGap = 10;
 
 /// The spread, PanelUI's web transition for it.
-const Duration _expandDuration = Duration(milliseconds: 450);
-const Curve _expandCurve = Cubic(0.22, 1, 0.36, 1);
+const Duration _spreadDuration = Duration(milliseconds: 450);
+const Curve _spreadCurve = Cubic(0.22, 1, 0.36, 1);
 
-/// Reanimated's default decay rate (0.998 per millisecond), per second.
-final double _decayDrag = math.pow(0.998, 1000).toDouble();
+/// From 640pt wide (Tailwind's `sm`) a toast stands 24pt in from the screen's
+/// edges and is at most 360pt wide, as on PanelUI's web. Narrower, it spans
+/// the screen less 16pt each side, as PanelUI's native toasts do.
+const double _wideScreen = 640;
+const double _wideMargin = 24;
+const double _wideMaxWidth = 360;
+const double _margin = 16;
 
 /// The status a toast reports.
 enum PanelToastVariant {
@@ -77,9 +94,11 @@ enum PanelToastVariant {
 
 /// Where on the screen toasts gather. Each position keeps a deck of its own.
 ///
-/// On a phone a toast spans the screen less a 16pt margin, so the start, the
-/// centre and the end of an edge are the same place. From 640pt wide a toast
-/// is at most 360pt, with a 24pt margin, and the three differ.
+/// PanelUI's native toasts gather at the top or the bottom, across the
+/// screen less a 16pt margin, so on a phone the start, the centre and the
+/// end of an edge are the same place. The corners come from its web package:
+/// from 640pt wide a toast is at most 360pt, with a 24pt margin, and the
+/// three differ.
 enum PanelToastPosition {
   /// The top edge, centred.
   top(true, 0),
@@ -125,16 +144,18 @@ typedef PanelToastBuilder =
 /// Toasts are drawn in an entry of the root [Overlay], the one the app's
 /// navigator creates, so nothing has to be added to the app: any context
 /// under a `MaterialApp` (or another app with a navigator) can raise one, and
-/// they stay above routes pushed later, dialogs and sheets included.
+/// they stay above routes pushed later, dialogs and sheets included. They
+/// keep clear of the safe area and of the keyboard, which PanelUI's would
+/// sit under.
 ///
 /// Toasts at the same [position] stack into a deck, the newest in front and
 /// up to two more peeking out behind it, a step smaller each. Hovering the
 /// deck with a mouse, or moving focus into it, spreads it into a list and
-/// pauses every toast's timer until the pointer leaves. A toast is swiped
-/// away toward its own edge; dragged the other way it resists and returns.
-/// It arrives on a heavy spring from 100pt off and leaves the way it came,
-/// fading; under reduced motion it only fades. Screen readers announce it
-/// politely as it arrives, without moving focus.
+/// pauses every toast's timer until the pointer leaves, as on PanelUI's web.
+/// A toast is swiped away toward its own edge; dragged the other way it
+/// resists, staying within a few points of its place, and returns. It
+/// arrives on a heavy spring from 100pt off and leaves the way it came,
+/// fading; under reduced motion it only fades.
 ///
 /// It closes itself after [duration] (four seconds by default), or stays
 /// until it is closed when [duration] is [Duration.zero]. The timers pause
@@ -246,6 +267,259 @@ class PanelToastHandle {
     _timer = null;
     _running = null;
     if (!_closed.isCompleted) _closed.complete();
+  }
+}
+
+/// A toast's surface: a status icon, a title and a description, and an
+/// action or a close button at the end, on the popover fill with a border in
+/// the status colour and PanelUI's `shadow-lg`.
+///
+/// [showPanelToast] builds one from its arguments. Build one yourself for a
+/// custom toast, or to show one in place.
+///
+/// ```dart
+/// PanelToast(
+///   variant: PanelToastVariant.success,
+///   title: const Text('Changes saved'),
+///   description: const Text('Your profile is up to date.'),
+///   onClose: () {},
+/// )
+/// ```
+///
+/// Screen readers announce it politely as it appears, without moving focus:
+/// it is the polite live region PanelUI asks for. PanelUI also gives it the
+/// alert role, which Flutter does not allow on a live region.
+class PanelToast extends StatelessWidget {
+  /// Creates a toast surface.
+  const PanelToast({
+    super.key,
+    this.variant = PanelToastVariant.neutral,
+    this.title,
+    this.description,
+    this.icon,
+    this.showIcon = true,
+    this.action,
+    this.onClose,
+    this.closeLabel = 'Dismiss notification',
+  });
+
+  /// The status, which picks the border, the title colour and the icon.
+  final PanelToastVariant variant;
+
+  /// The title line, usually a [Text]: small, medium weight, in the status
+  /// colour.
+  final Widget? title;
+
+  /// A line under the title, usually a [Text]: small and muted.
+  final Widget? description;
+
+  /// Replaces the status icon.
+  final Widget? icon;
+
+  /// Whether to show the status icon.
+  final bool showIcon;
+
+  /// A control at the end, usually a [PanelToastAction].
+  final Widget? action;
+
+  /// Called by the close button. Null leaves the button out.
+  final VoidCallback? onClose;
+
+  /// The close button's accessible name.
+  final String closeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    // The border at 32% of the status colour, and the icon and the title in
+    // its foreground; the neutral toast keeps the popover's own colours.
+    final (border, tone, titleColor, glyph) = switch (variant) {
+      PanelToastVariant.neutral => (
+        c.border,
+        c.mutedForeground,
+        c.popoverForeground,
+        PanelIcons.info,
+      ),
+      PanelToastVariant.info => (
+        c.info.withValues(alpha: 0.32),
+        c.infoForeground,
+        c.infoForeground,
+        PanelIcons.info,
+      ),
+      PanelToastVariant.success => (
+        c.success.withValues(alpha: 0.32),
+        c.successForeground,
+        c.successForeground,
+        PanelIcons.checkCircle,
+      ),
+      PanelToastVariant.warning => (
+        c.warning.withValues(alpha: 0.32),
+        c.warningForeground,
+        c.warningForeground,
+        PanelIcons.alertTriangle,
+      ),
+      PanelToastVariant.destructive => (
+        c.destructive.withValues(alpha: 0.32),
+        c.destructiveForeground,
+        c.destructiveForeground,
+        PanelIcons.alertTriangle,
+      ),
+    };
+
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Container(
+        // `rounded-2xl border px-4 py-3.5 shadow-lg`.
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: c.popover,
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(theme.radii.xxl),
+          boxShadow: theme.shadows.lg,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 12,
+          children: [
+            if (showIcon)
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: IconTheme(
+                  data: IconThemeData(color: tone, size: 18),
+                  child: icon ?? PanelIcon(glyph),
+                ),
+              ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                spacing: 2,
+                children: [
+                  if (title != null)
+                    DefaultTextStyle(
+                      style: theme.typography.style(
+                        PanelTextSize.sm,
+                        weight: FontWeight.w500,
+                        color: titleColor,
+                      ),
+                      child: title!,
+                    ),
+                  if (description != null)
+                    DefaultTextStyle(
+                      style: theme.typography.style(
+                        PanelTextSize.sm,
+                        color: c.mutedForeground,
+                      ),
+                      child: description!,
+                    ),
+                ],
+              ),
+            ),
+            ?action,
+            if (onClose != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: _ToastCloseButton(
+                  label: closeLabel,
+                  onPressed: onClose!,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The action at a toast's end: a small secondary button that closes its
+/// toast once [onPressed] has run.
+class PanelToastAction extends StatelessWidget {
+  /// Creates a toast action.
+  const PanelToastAction({
+    super.key,
+    required this.onPressed,
+    required this.child,
+    this.variant = PanelButtonVariant.secondary,
+    this.size = PanelButtonSize.sm,
+  });
+
+  /// Called when the action is pressed, before the toast closes. Null
+  /// disables it.
+  final VoidCallback? onPressed;
+
+  /// The label, usually a [Text].
+  final Widget child;
+
+  /// The button's look. Secondary reads on the popover surface.
+  final PanelButtonVariant variant;
+
+  /// The button's size.
+  final PanelButtonSize size;
+
+  @override
+  Widget build(BuildContext context) {
+    final toast = PanelToastHandle.maybeOf(context);
+    final pressed = onPressed;
+    return PanelButton(
+      variant: variant,
+      size: size,
+      onPressed: pressed == null
+          ? null
+          : () {
+              pressed();
+              toast?.hide();
+            },
+      child: child,
+    );
+  }
+}
+
+/// The close button at a toast's end: a 14pt cross in the muted foreground,
+/// in a ghost icon button made 24pt round (`h-6 w-6 rounded-full`) whose
+/// target reaches 2pt further, as an icon button's does in PanelUI. Like a
+/// button it shrinks a little while pressed.
+///
+/// Hover and focus follow PanelUI's web toast: hovered, the circle takes the
+/// `accent` fill and the cross the foreground, at once; focused, it takes a
+/// 2pt ring.
+class _ToastCloseButton extends StatelessWidget {
+  const _ToastCloseButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = PanelTheme.of(context).colors;
+    return PanelPressable(
+      onPressed: onPressed,
+      hitSlop: const EdgeInsets.all(2),
+      semanticLabel: label,
+      builder: (context, state) => Container(
+        width: 24,
+        height: 24,
+        // Centred, so the glyph keeps its own size inside the circle.
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: state.hovered ? c.accent : null,
+          shape: BoxShape.circle,
+          border: state.focused
+              ? Border.all(
+                  color: c.ring,
+                  width: 2,
+                  strokeAlign: BorderSide.strokeAlignOutside,
+                )
+              : null,
+        ),
+        child: PanelIcon(
+          PanelIcons.x,
+          size: 14,
+          color: state.hovered ? c.foreground : c.mutedForeground,
+        ),
+      ),
+    );
   }
 }
 
@@ -550,14 +824,19 @@ class _ToastDeck extends StatefulWidget {
 
 class _ToastDeckState extends State<_ToastDeck>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _expansion = AnimationController(
+  /// How far the deck is spread, run the way the web package's CSS
+  /// transition runs it: each change sets off afresh from wherever the deck
+  /// is, over 450ms on the same ease-out, whether it is opening or gathering.
+  late final AnimationController _spreadClock = AnimationController(
     vsync: this,
-    duration: _expandDuration,
+    duration: _spreadDuration,
   );
-  late final CurvedAnimation _spread = CurvedAnimation(
-    parent: _expansion,
-    curve: _expandCurve,
+  late final CurvedAnimation _spreadEased = CurvedAnimation(
+    parent: _spreadClock,
+    curve: _spreadCurve,
   );
+  final Tween<double> _spreadRange = Tween<double>(begin: 0, end: 0);
+  late final Animation<double> _spread = _spreadRange.animate(_spreadEased);
 
   /// Natural heights, by toast.
   final Map<PanelToastHandle, double> _heights = {};
@@ -581,20 +860,23 @@ class _ToastDeckState extends State<_ToastDeck>
   @override
   void dispose() {
     widget.host._setPaused(this, false);
-    _spread.dispose();
-    _expansion.dispose();
+    _spreadEased.dispose();
+    _spreadClock.dispose();
     super.dispose();
   }
 
   void _syncExpansion() {
     final expanded = _expanded;
     widget.host._setPaused(this, expanded);
+    final target = expanded ? 1.0 : 0.0;
+    if (_spreadRange.end == target) return;
+    _spreadRange
+      ..begin = _spread.value
+      ..end = target;
     if (panelReduceMotion(context)) {
-      _expansion.value = expanded ? 1 : 0;
-    } else if (expanded) {
-      _expansion.forward();
+      _spreadClock.value = 1;
     } else {
-      _expansion.reverse();
+      _spreadClock.forward(from: 0);
     }
   }
 
@@ -624,16 +906,16 @@ class _ToastDeckState extends State<_ToastDeck>
     final position = widget.position;
     final top = position._top;
 
-    final wide = size.width >= 640;
-    final inset = wide ? 24.0 : 16.0;
-    final room = math.max(0.0, size.width - 2 * inset);
-    final width = wide ? math.min(room, 360.0) : room;
+    final wide = size.width >= _wideScreen;
+    final margin = wide ? _wideMargin : _margin;
+    final room = math.max(0.0, size.width - 2 * margin);
+    final width = wide ? math.min(room, _wideMaxWidth) : room;
     final x =
-        inset + (room - width) * ((rtl ? -position._x : position._x) + 1) / 2;
+        margin + (room - width) * ((rtl ? -position._x : position._x) + 1) / 2;
     // The edge the deck hangs from, clear of the safe area and the keyboard.
     final anchor = top
-        ? padding.top + inset
-        : padding.bottom + keyboard + inset;
+        ? padding.top + margin
+        : padding.bottom + keyboard + margin;
 
     final live = [
       for (final slot in widget.slots)
@@ -650,9 +932,10 @@ class _ToastDeckState extends State<_ToastDeck>
     for (final slot in widget.slots) {
       final index = shown.indexOf(slot);
       if (!slot.leaving && index < 0) continue;
-      var spread = 0.0;
+      // Spread, a card sits past every card in front of it.
+      var spreadOffset = 0.0;
       for (var j = index + 1; index >= 0 && j < total; j++) {
-        spread += (_heights[shown[j].toast] ?? 0) + _spreadGap;
+        spreadOffset += (_heights[shown[j].toast] ?? 0) + _spreadGap;
       }
       children.add(
         Positioned(
@@ -666,7 +949,7 @@ class _ToastDeckState extends State<_ToastDeck>
             top: top,
             depth: index < 0 ? 0 : total - 1 - index,
             frontHeight: frontHeight,
-            spread: spread,
+            spreadOffset: spreadOffset,
             expansion: _spread,
             leaving: slot.leaving,
             onHeight: (height) => _handleHeight(slot.toast, height),
@@ -686,6 +969,17 @@ class _ToastDeckState extends State<_ToastDeck>
   }
 }
 
+/// Where a toast is drawn on one frame: its vertical offset from its place
+/// in the deck, its scale about the height `pivot`, its opacity, and how much
+/// of it shows from the side away from its edge (null when all of it does).
+typedef _Pose = ({
+  double dy,
+  double scale,
+  double pivot,
+  double opacity,
+  double? visible,
+});
+
 /// One toast in a deck, and everything that moves it.
 class _ToastSlot extends StatefulWidget {
   const _ToastSlot({
@@ -693,7 +987,7 @@ class _ToastSlot extends StatefulWidget {
     required this.top,
     required this.depth,
     required this.frontHeight,
-    required this.spread,
+    required this.spreadOffset,
     required this.expansion,
     required this.leaving,
     required this.onHeight,
@@ -714,7 +1008,7 @@ class _ToastSlot extends StatefulWidget {
   final double? frontHeight;
 
   /// How far from the edge it sits when the deck is spread.
-  final double spread;
+  final double spreadOffset;
 
   /// How far the deck is spread, from 0 to 1.
   final Animation<double> expansion;
@@ -740,27 +1034,39 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
   );
   late final AnimationController _press = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 120),
+    duration: _pressDuration,
   );
   late final AnimationController _depth = AnimationController.unbounded(
     vsync: this,
     value: widget.depth.toDouble(),
   );
-  late final AnimationController _spread = AnimationController.unbounded(
+  late final AnimationController _spreadOffset = AnimationController.unbounded(
     vsync: this,
-    value: widget.spread,
+    value: widget.spreadOffset,
   );
+  late Listenable _ticks = _merged();
+
+  /// The toast's own content, built once: the deck rebuilds its slots as
+  /// heights arrive and toasts come and go, and none of that changes it.
+  late final Widget _card = _buildCard();
 
   double? _height;
   double? _frozenFrontHeight;
-
-  /// The drag before the rubber band is applied.
-  double _raw = 0;
   bool _reduceMotion = false;
   bool _started = false;
 
   /// +1 when the toast's edge is below it, -1 when above.
   double get _edge => widget.top ? -1 : 1;
+
+  Listenable _merged() => Listenable.merge([
+    _enter,
+    _exit,
+    _drag,
+    _press,
+    _depth,
+    _spreadOffset,
+    widget.expansion,
+  ]);
 
   @override
   void didChangeDependencies() {
@@ -780,42 +1086,26 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(_ToastSlot oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.expansion != oldWidget.expansion) _ticks = _merged();
     if (widget.leaving && !oldWidget.leaving) {
       _frozenFrontHeight = oldWidget.frontHeight;
       _leave();
     }
     if (widget.leaving) return;
-    if (widget.depth != oldWidget.depth) {
-      _settle(_depth, widget.depth.toDouble());
+    if (widget.depth != oldWidget.depth) _settleDepth(widget.depth);
+    if (widget.spreadOffset != oldWidget.spreadOffset) {
+      // It only shows while the deck is spread, which is the web package's
+      // behaviour, so it moves on the web's transition rather than a spring.
+      if (_reduceMotion) {
+        _spreadOffset.value = widget.spreadOffset;
+      } else {
+        _spreadOffset.animateTo(
+          widget.spreadOffset,
+          duration: _spreadDuration,
+          curve: _spreadCurve,
+        );
+      }
     }
-    if (widget.spread != oldWidget.spread) {
-      _settle(_spread, widget.spread);
-    }
-  }
-
-  void _settle(AnimationController controller, double target) {
-    if (_reduceMotion) {
-      controller.value = target;
-      return;
-    }
-    controller.animateWith(
-      SpringSimulation(
-        PanelSprings.stack,
-        controller.value,
-        target,
-        controller.velocity,
-        tolerance: const Tolerance(velocity: 0.01),
-        snapToEnd: true,
-      ),
-    );
-  }
-
-  void _leave() {
-    _press.value = 0;
-    _exit.duration = _reduceMotion ? PanelDurations.fadeOut : _exitDuration;
-    _exit.forward().whenComplete(() {
-      if (mounted) widget.onLeft();
-    });
   }
 
   @override
@@ -825,8 +1115,26 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
     _drag.dispose();
     _press.dispose();
     _depth.dispose();
-    _spread.dispose();
+    _spreadOffset.dispose();
     super.dispose();
+  }
+
+  /// Moves the toast to [depth] in the deck on PanelUI's stack spring, or
+  /// straight there under reduced motion.
+  void _settleDepth(int depth) {
+    if (_reduceMotion) {
+      _depth.value = depth.toDouble();
+    } else {
+      _depth.springTo(depth.toDouble(), PanelSprings.stack);
+    }
+  }
+
+  void _leave() {
+    _press.value = 0;
+    _exit.duration = _reduceMotion ? PanelDurations.fadeOut : _exitDuration;
+    _exit.forward().whenComplete(() {
+      if (mounted) widget.onLeft();
+    });
   }
 
   void _handleHeight(double height) {
@@ -840,29 +1148,26 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
     _press.animateTo(target, curve: panelEase);
   }
 
-  void _handleDragStart(DragStartDetails details) {
-    _drag.stop();
-    final value = _drag.value;
-    // Recover the finger travel behind a rubber-banded position.
-    _raw = value * _edge >= 0
-        ? value
-        : value / _rubberBandLimit * _rubberBandTravel;
-  }
+  /// Takes hold of the toast where it is, catching it if it is springing
+  /// back.
+  void _handleDragStart(DragStartDetails details) => _drag.stop();
 
   void _handleDragUpdate(DragUpdateDetails details) {
-    _raw += details.primaryDelta ?? 0;
-    if (_raw * _edge > 0) {
-      // Toward the edge: follow the finger.
-      _drag.value = _raw;
-    } else {
-      // Away from it: rubber-band, so the toast never detaches from where it
-      // belongs.
-      final travel = math.min(_raw.abs(), _rubberBandTravel);
-      _drag.value = -_edge * travel / _rubberBandTravel * _rubberBandLimit;
-    }
+    final next = _drag.value + (details.primaryDelta ?? 0);
+    // Toward the edge it follows the finger. Away from it, it rubber-bands
+    // so it never detaches from where it belongs: PanelUI cuts each new
+    // position to a tenth (40pt at most), which compounds over the moves and
+    // holds the toast within a few points of its place.
+    _drag.value = next * _edge > 0
+        ? next
+        : -_edge *
+              math.min(next.abs(), _rubberBandTravel) /
+              _rubberBandTravel *
+              _rubberBandLimit;
   }
 
-  void _handleDragEnd(double velocity) {
+  void _handleDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
     _pressTo(0);
     final towardEdge = _drag.value * _edge > 0;
     final dismiss =
@@ -889,21 +1194,33 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildCard() {
     final toast = widget.toast;
     Widget card = _ToastScope(
       toast: toast,
       child: Builder(builder: (context) => toast._builder(context, toast)),
     );
     card = _MeasureHeight(onHeight: _handleHeight, child: card);
+    // How Flutter offers a swipe to a screen reader, which cannot make one.
     card = Semantics(container: true, onDismiss: toast.hide, child: card);
-    card = GestureDetector(
+    card = RawGestureDetector(
       excludeFromSemantics: true,
-      onVerticalDragStart: _handleDragStart,
-      onVerticalDragUpdate: _handleDragUpdate,
-      onVerticalDragEnd: (details) =>
-          _handleDragEnd(details.primaryVelocity ?? 0),
+      gestures: {
+        VerticalDragGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<VerticalDragGestureRecognizer>(
+              () => VerticalDragGestureRecognizer(debugOwner: this),
+              (recognizer) => recognizer
+                ..gestureSettings = const DeviceGestureSettings(
+                  touchSlop: _swipeSlop,
+                )
+                // The whole of the finger's travel, slop included, as with
+                // PanelUI's pan.
+                ..dragStartBehavior = DragStartBehavior.down
+                ..onStart = _handleDragStart
+                ..onUpdate = _handleDragUpdate
+                ..onEnd = _handleDragEnd,
+            ),
+      },
       child: card,
     );
     card = Listener(
@@ -912,86 +1229,88 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
       onPointerCancel: (_) => _pressTo(0),
       child: card,
     );
+    // Its own layer, so the deck moves a finished picture of the card.
+    return RepaintBoundary(child: card);
+  }
 
+  /// Where the card is drawn on this frame.
+  _Pose _pose() {
+    final edge = _edge;
+    final spread = widget.expansion.value;
+    final depth = _depth.value;
+    final height = _height;
+    final front =
+        (widget.leaving ? _frozenFrontHeight : widget.frontHeight) ?? height;
+    final known = height != null && front != null;
+
+    // Collapsed, a card shows the front card's height of itself, the far
+    // side of that box stepped back from the edge by its depth. Spread, it
+    // shows all of itself at its place in the list.
+    final collapsedShift =
+        (known ? edge * (height - front) : 0) -
+        edge * _stackOffset * math.max(depth, 0);
+    var dy = lerpDouble(collapsedShift, -edge * _spreadOffset.value, spread)!;
+    final collapsedScale = 1 - (1 - _stackScaleStep) * math.max(depth, 0);
+    var scale = lerpDouble(collapsedScale, 1, spread)!;
+    // Anything past the newest three fades out rather than piling up.
+    var opacity = (_maxVisible - depth).clamp(0.0, 1.0);
+
+    if (_reduceMotion) {
+      opacity *= _enter.value.clamp(0.0, 1.0);
+    } else {
+      dy += (1 - _enter.value) * _enterOffset * edge;
+    }
+    final exit = _exit.value;
+    if (exit > 0) {
+      if (_reduceMotion) {
+        opacity *= 1 - panelEase.transform(exit);
+      } else {
+        final t = _exitCurve.transform(exit);
+        opacity *= 1 - t;
+        dy += t * _enterOffset * edge;
+        scale *= 1 - (1 - _stackScaleStep) * t;
+      }
+    }
+    dy += _drag.value;
+    scale *= 1 - (1 - _pressScale) * _press.value;
+
+    final visible = known ? lerpDouble(front, height, spread)! : null;
+    // The centre of the part that shows, which is what the deck scales. A
+    // bottom deck's card sits under the bridge above it.
+    final centre = known
+        ? (widget.top
+              ? lerpDouble(height - front / 2, height / 2, spread)!
+              : lerpDouble(front / 2, height / 2, spread)!)
+        : (height ?? 0) / 2;
+    return (
+      dy: dy,
+      scale: scale,
+      pivot: centre + (widget.top ? 0 : _spreadGap),
+      opacity: opacity.clamp(0.0, 1.0),
+      visible: visible != null && visible < height! - 0.5 ? visible : null,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final top = widget.top;
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        _enter,
-        _exit,
-        _drag,
-        _press,
-        _depth,
-        _spread,
-        widget.expansion,
-      ]),
-      child: card,
+      animation: _ticks,
+      child: _card,
       builder: (context, child) {
-        final edge = _edge;
-        final spread = widget.expansion.value;
-        final depth = _depth.value;
-        final height = _height;
-        final front =
-            (widget.leaving ? _frozenFrontHeight : widget.frontHeight) ??
-            height;
-
-        // Collapsed, a card shows the front card's height of itself, with
-        // the far side of that box stepped back from the edge by its depth.
-        // Spread, it shows all of itself at its place in the list.
-        final known = height != null && front != null;
-        final collapsedShift =
-            (known ? edge * (height - front) : 0) - edge * _stackOffset * depth;
-        var dy = lerpDouble(collapsedShift, -edge * _spread.value, spread)!;
-        var scale = lerpDouble(
-          depth <= 0 ? 1 : 1 - (1 - _stackScaleStep) * depth,
-          1,
-          spread,
-        )!;
-        // Anything past the newest three fades out rather than piling up.
-        var opacity = (_maxVisible - depth).clamp(0.0, 1.0);
-
-        if (_reduceMotion) {
-          opacity *= _enter.value.clamp(0.0, 1.0);
-        } else {
-          dy += (1 - _enter.value) * _enterOffset * edge;
-        }
-        final exit = _exit.value;
-        if (exit > 0) {
-          if (_reduceMotion) {
-            opacity *= 1 - panelEase.transform(exit);
-          } else {
-            final t = _exitCurve.transform(exit);
-            opacity *= 1 - t;
-            dy += t * _enterOffset * edge;
-            scale *= 1 - (1 - _stackScaleStep) * t;
-          }
-        }
-        dy += _drag.value;
-        scale *= 1 - 0.005 * _press.value;
-
-        final visible = known ? lerpDouble(front, height, spread)! : null;
-        final clipped = visible != null && visible < height! - 0.5;
-        // The centre of the box that shows, which is what the deck scales.
-        // A bottom deck's card sits under the bridge above it.
-        final pivot =
-            (known
-                ? (top
-                      ? lerpDouble(height - front / 2, height / 2, spread)!
-                      : lerpDouble(front / 2, height / 2, spread)!)
-                : (height ?? 0) / 2) +
-            (top ? 0 : _spreadGap);
-
+        final pose = _pose();
         // Always in the tree, so the card under it is never remounted (and a
         // drag on it never dropped) as it starts or stops being clipped.
         Widget result = ClipRect(
           clipper: _VisibleBox(
-            extent: clipped ? visible : double.infinity,
+            extent: pose.visible ?? double.infinity,
             fromTop: !top,
           ),
-          clipBehavior: clipped ? Clip.hardEdge : Clip.none,
+          clipBehavior: pose.visible == null ? Clip.none : Clip.hardEdge,
           child: child,
         );
         // A bridge over the gap to the next card, so moving the pointer
-        // across a spread deck does not collapse it. It lets taps through.
+        // across a spread deck does not gather it. It lets taps through.
         result = MouseRegion(
           hitTestBehavior: HitTestBehavior.translucent,
           onEnter: (_) => widget.onHover(true),
@@ -1003,18 +1322,20 @@ class _ToastSlotState extends State<_ToastSlot> with TickerProviderStateMixin {
             child: result,
           ),
         );
-        result = Transform.translate(
-          offset: Offset(0, dy),
-          child: Transform(
-            alignment: Alignment.topCenter,
-            origin: Offset(0, pivot),
-            transform: Matrix4.diagonal3Values(scale, scale, 1),
-            child: result,
-          ),
-        );
         return IgnorePointer(
-          ignoring: widget.leaving || opacity < 0.01,
-          child: Opacity(opacity: opacity.clamp(0.0, 1.0), child: result),
+          ignoring: widget.leaving || pose.opacity < 0.01,
+          child: Opacity(
+            opacity: pose.opacity,
+            child: Transform.translate(
+              offset: Offset(0, pose.dy),
+              child: Transform(
+                alignment: Alignment.topCenter,
+                origin: Offset(0, pose.pivot),
+                transform: Matrix4.diagonal3Values(pose.scale, pose.scale, 1),
+                child: result,
+              ),
+            ),
+          ),
         );
       },
     );
@@ -1090,252 +1411,5 @@ class _RenderMeasureHeight extends RenderProxyBox {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (attached) onHeight(height);
     });
-  }
-}
-
-/// A toast's surface: a status icon, a title and a description, and an
-/// action or a close button at the end, on the popover fill with a border in
-/// the status colour and PanelUI's `shadow-lg`.
-///
-/// [showPanelToast] builds one from its arguments. Build one yourself for a
-/// custom toast, or to show one in place.
-///
-/// ```dart
-/// PanelToast(
-///   variant: PanelToastVariant.success,
-///   title: const Text('Changes saved'),
-///   description: const Text('Your profile is up to date.'),
-///   onClose: () {},
-/// )
-/// ```
-///
-/// Screen readers announce it politely as it appears, without moving focus.
-class PanelToast extends StatelessWidget {
-  /// Creates a toast surface.
-  const PanelToast({
-    super.key,
-    this.variant = PanelToastVariant.neutral,
-    this.title,
-    this.description,
-    this.icon,
-    this.showIcon = true,
-    this.action,
-    this.onClose,
-    this.closeLabel = 'Dismiss notification',
-  });
-
-  /// The status, which picks the border, the title colour and the icon.
-  final PanelToastVariant variant;
-
-  /// The title line, usually a [Text]: small, medium weight, in the status
-  /// colour.
-  final Widget? title;
-
-  /// A line under the title, usually a [Text]: small and muted.
-  final Widget? description;
-
-  /// Replaces the status icon.
-  final Widget? icon;
-
-  /// Whether to show the status icon.
-  final bool showIcon;
-
-  /// A control at the end, usually a [PanelToastAction].
-  final Widget? action;
-
-  /// Called by the close button. Null leaves the button out.
-  final VoidCallback? onClose;
-
-  /// The close button's accessible name.
-  final String closeLabel;
-
-  (Color border, Color tone, Color title, PanelIconData glyph) _palette(
-    PanelColors c,
-  ) {
-    switch (variant) {
-      case PanelToastVariant.neutral:
-        return (
-          c.border,
-          c.mutedForeground,
-          c.popoverForeground,
-          PanelIcons.info,
-        );
-      case PanelToastVariant.info:
-        return (
-          c.info.withValues(alpha: 0.32),
-          c.infoForeground,
-          c.infoForeground,
-          PanelIcons.info,
-        );
-      case PanelToastVariant.success:
-        return (
-          c.success.withValues(alpha: 0.32),
-          c.successForeground,
-          c.successForeground,
-          PanelIcons.checkCircle,
-        );
-      case PanelToastVariant.warning:
-        return (
-          c.warning.withValues(alpha: 0.32),
-          c.warningForeground,
-          c.warningForeground,
-          PanelIcons.alertTriangle,
-        );
-      case PanelToastVariant.destructive:
-        return (
-          c.destructive.withValues(alpha: 0.32),
-          c.destructiveForeground,
-          c.destructiveForeground,
-          PanelIcons.alertTriangle,
-        );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = PanelTheme.of(context);
-    final c = theme.colors;
-    final (border, tone, titleColor, glyph) = _palette(c);
-
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: c.popover,
-          border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(theme.radii.xxl),
-          boxShadow: theme.shadows.lg,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 12,
-          children: [
-            if (showIcon)
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: IconTheme(
-                  data: IconThemeData(color: tone, size: 18),
-                  child: icon ?? PanelIcon(glyph),
-                ),
-              ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                spacing: 2,
-                children: [
-                  if (title != null)
-                    DefaultTextStyle(
-                      style: theme.typography.style(
-                        PanelTextSize.sm,
-                        weight: FontWeight.w500,
-                        color: titleColor,
-                      ),
-                      child: title!,
-                    ),
-                  if (description != null)
-                    DefaultTextStyle(
-                      style: theme.typography.style(
-                        PanelTextSize.sm,
-                        color: c.mutedForeground,
-                      ),
-                      child: description!,
-                    ),
-                ],
-              ),
-            ),
-            ?action,
-            if (onClose != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: _ToastCloseButton(
-                  label: closeLabel,
-                  onPressed: onClose!,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The close button at a toast's end: a ghost icon button 24pt round.
-class _ToastCloseButton extends StatelessWidget {
-  const _ToastCloseButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = PanelTheme.of(context).colors;
-    return PanelPressable(
-      onPressed: onPressed,
-      semanticLabel: label,
-      focusRingRadius: BorderRadius.circular(12),
-      builder: (context, state) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-        width: 24,
-        height: 24,
-        // Centred, so the glyph keeps its own size inside the circle.
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: state.hovered ? c.accent : const Color(0x00000000),
-          shape: BoxShape.circle,
-        ),
-        child: PanelIcon(
-          PanelIcons.x,
-          size: 14,
-          color: state.hovered ? c.foreground : c.mutedForeground,
-        ),
-      ),
-    );
-  }
-}
-
-/// The action at a toast's end: a small secondary button that closes its
-/// toast once [onPressed] has run.
-class PanelToastAction extends StatelessWidget {
-  /// Creates a toast action.
-  const PanelToastAction({
-    super.key,
-    required this.onPressed,
-    required this.child,
-    this.variant = PanelButtonVariant.secondary,
-    this.size = PanelButtonSize.sm,
-  });
-
-  /// Called when the action is pressed, before the toast closes. Null
-  /// disables it.
-  final VoidCallback? onPressed;
-
-  /// The label, usually a [Text].
-  final Widget child;
-
-  /// The button's look. Secondary reads on the popover surface.
-  final PanelButtonVariant variant;
-
-  /// The button's size.
-  final PanelButtonSize size;
-
-  @override
-  Widget build(BuildContext context) {
-    final toast = PanelToastHandle.maybeOf(context);
-    final pressed = onPressed;
-    return PanelButton(
-      variant: variant,
-      size: size,
-      onPressed: pressed == null
-          ? null
-          : () {
-              pressed();
-              toast?.hide();
-            },
-      child: child,
-    );
   }
 }

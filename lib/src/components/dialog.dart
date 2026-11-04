@@ -7,29 +7,66 @@ import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 
-/// The padding inside a [PanelDialog], `p-5`. A panel footer bleeds back out
-/// through exactly this much, so the two move together.
+/// The space between the dialog and the edges of the screen, `p-6`.
+const double _screenMargin = 24;
+
+/// The padding inside a dialog, `p-5`. A panel footer bleeds back out through
+/// exactly this much, so the two move together.
 const double _dialogPadding = 20;
 
-/// The scrim's fade in each direction. PanelUI fades the dialog's layer in
-/// over 150ms and out over 150ms; the box itself leaves faster, over the
-/// first 120ms of that.
-const Duration _scrimFade = Duration(milliseconds: 150);
+/// The gap between the parts of a dialog, `gap-1.5`.
+const double _gap = 6;
 
-/// The box's own fade-out, [PanelDurations.fadeOut] (120ms), as the part of
-/// the 150ms reverse transition it occupies.
-final Curve _contentExit = Interval(
-  1 - PanelDurations.fadeOut.inMicroseconds / _scrimFade.inMicroseconds,
+/// How far a plain footer sits below the content, on top of the gap: `mt-4`.
+const double _plainFooterMargin = 16;
+
+/// How far a panel footer sits below the content, on top of the gap: `mt-5`.
+const double _panelFooterMargin = 20;
+
+/// A panel footer's padding above and below its buttons.
+const double _panelFooterPaddingY = 16;
+
+/// The gap between the footer's buttons, `gap-2`.
+const double _actionGap = 8;
+
+/// The dialog's layer fading in and out, `FadeIn.duration(150)` and
+/// `FadeOut.duration(150)`. The scrim and the dialog both sit in it.
+const Duration _layerFade = Duration(milliseconds: 150);
+
+/// The dialog's own fade-out, `FadeOut.duration(120)`
+/// ([PanelDurations.fadeOut]), as the stretch of the layer's fade-out it
+/// takes up.
+final Curve _boxExit = Interval(
+  1 - PanelDurations.fadeOut.inMicroseconds / _layerFade.inMicroseconds,
   1,
   curve: panelEase,
 );
 
+/// Whether a dialog's footer draws a surface of its own.
+enum PanelDialogFooterVariant {
+  /// Part of the dialog: the same fill, under the content with a gap above.
+  plain,
+
+  /// A band set into the dialog: a rule across the top, a step darker, out
+  /// to the dialog's edges and bottom corners. It separates what the dialog
+  /// says from what you can do about it, which is worth it on a dialog with
+  /// a form in it, where the buttons are otherwise one more row of fields.
+  panel,
+}
+
 /// Shows a dialog over the app and returns the value it is popped with.
 ///
-/// The screen behind fades to a 50% dim over 150ms (or frosts, with [blur]),
-/// and the dialog zooms in from nothing on a spring (damping 18, stiffness
-/// 250, mass 0.6) that lands with a slight overshoot. It leaves with a fade.
-/// Under reduced motion the zoom is dropped and only the fades remain.
+/// The dialog and the scrim behind it fade in over 150ms, the scrim also
+/// running its own fade inside that one, to a 50% dim (or a frost, with
+/// [blur]). The dialog zooms in from nothing on a spring (damping 18,
+/// stiffness 250, mass 0.6) that lands with a slight overshoot. It leaves
+/// with a fade: the layer over 150ms, the dialog itself over the first 120ms
+/// of that.
+///
+/// Under reduced motion the zoom is dropped and the fades remain, as
+/// PanelUI's toast and sheet keep theirs: a dialog that appears with no
+/// transition at all is a jump-cut, and it is travel and scale that the
+/// setting is about.
 ///
 /// ```dart
 /// final delete = await showPanelDialog<bool>(
@@ -93,9 +130,11 @@ Future<T?> showPanelDialog<T>(
 
 /// The route [showPanelDialog] pushes, for code that pushes routes itself.
 ///
-/// It centres what [builder] returns, at least 24pt from the screen's edges
-/// and clear of the keyboard, draws the scrim behind it, and runs PanelUI's
-/// entrance and exit.
+/// It centres what [builder] returns 24pt clear of the screen's edges, as
+/// PanelUI does, draws the scrim behind it, and runs PanelUI's entrance and
+/// exit. It also keeps the dialog clear of the keyboard, which PanelUI leaves
+/// to the app: a dialog with a field in it would otherwise have its buttons
+/// under the keyboard while the field is being typed in.
 class PanelDialogRoute<T> extends PopupRoute<T> {
   /// Creates a dialog route.
   PanelDialogRoute({
@@ -132,15 +171,15 @@ class PanelDialogRoute<T> extends PopupRoute<T> {
   @override
   String get barrierLabel => _barrierLabel ?? 'Close dialog';
 
-  // The scrim is drawn by buildModalBarrier, with PanelUI's own curve.
+  // The scrim is drawn by buildModalBarrier, with PanelUI's own fades.
   @override
   Color? get barrierColor => null;
 
   @override
-  Duration get transitionDuration => _scrimFade;
+  Duration get transitionDuration => _layerFade;
 
   @override
-  Duration get reverseTransitionDuration => _scrimFade;
+  Duration get reverseTransitionDuration => _layerFade;
 
   // A dialog that the scrim cannot close is not closed by the back button
   // either: it is there to be answered.
@@ -148,21 +187,27 @@ class PanelDialogRoute<T> extends PopupRoute<T> {
   RoutePopDisposition get popDisposition =>
       barrierDismissible ? super.popDisposition : RoutePopDisposition.doNotPop;
 
+  /// The opacity of the layer the scrim sits in. Leaving, the scrim also
+  /// fades itself out over the same 150ms inside that layer, so it goes at
+  /// the square of the layer's fade. (Coming in, its own fade is the
+  /// scrim's to run.)
+  double _scrimOpacity() {
+    final fade = animation!;
+    final layer = panelEase.transform(fade.value);
+    return fade.status == AnimationStatus.reverse ? layer * layer : layer;
+  }
+
   @override
   Widget buildModalBarrier() {
-    final barrier = super.buildModalBarrier();
-    final fade = animation!;
     return Stack(
       fit: StackFit.expand,
       children: [
         AnimatedBuilder(
-          animation: fade,
-          builder: (context, _) => PanelOverlayScrim(
-            progress: panelEase.transform(fade.value.clamp(0.0, 1.0)),
-            blur: blur,
-          ),
+          animation: animation!,
+          builder: (context, _) =>
+              PanelOverlayScrim(opacity: _scrimOpacity(), blur: blur),
         ),
-        barrier,
+        super.buildModalBarrier(),
       ],
     );
   }
@@ -173,31 +218,33 @@ class PanelDialogRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final theme = PanelTheme.of(context);
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
       child: DisplayFeatureSubScreen(
         anchorPoint: anchorPoint,
         child: Padding(
-          padding: EdgeInsets.only(bottom: keyboard),
-          child: SafeArea(
-            minimum: const EdgeInsets.all(24),
-            child: Center(
-              child: _PanelDialogTransition(
-                animation: animation,
-                // Draws nothing: it is there so Material widgets placed in a
-                // dialog find the ancestor they need.
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: DefaultTextStyle(
-                    style: theme.typography.style(
-                      PanelTextSize.base,
-                      color: theme.colors.foreground,
-                    ),
-                    child: Builder(builder: builder),
+          padding: EdgeInsets.fromLTRB(
+            _screenMargin,
+            _screenMargin,
+            _screenMargin,
+            _screenMargin + keyboard,
+          ),
+          child: Center(
+            child: _DialogTransition(
+              animation: animation,
+              // Draws nothing: it is there so Material widgets placed in a
+              // dialog find the ancestor they need.
+              child: Material(
+                type: MaterialType.transparency,
+                child: DefaultTextStyle(
+                  style: theme.typography.style(
+                    PanelTextSize.base,
+                    color: theme.colors.foreground,
                   ),
+                  child: Builder(builder: builder),
                 ),
               ),
             ),
@@ -206,79 +253,6 @@ class PanelDialogRoute<T> extends PopupRoute<T> {
       ),
     );
   }
-}
-
-/// The dialog's own motion: a fade that matches the scrim's, a spring zoom
-/// in from nothing, and a quicker fade out.
-class _PanelDialogTransition extends StatefulWidget {
-  const _PanelDialogTransition({required this.animation, required this.child});
-
-  final Animation<double> animation;
-  final Widget child;
-
-  @override
-  State<_PanelDialogTransition> createState() => _PanelDialogTransitionState();
-}
-
-class _PanelDialogTransitionState extends State<_PanelDialogTransition>
-    with SingleTickerProviderStateMixin {
-  // Unbounded, so the spring's overshoot past full size survives.
-  late final AnimationController _zoom = AnimationController.unbounded(
-    vsync: this,
-    value: 1,
-  );
-  bool _started = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_started) return;
-    _started = true;
-    // A route added without a transition (restored, say) arrives at rest.
-    final entering = widget.animation.status == AnimationStatus.forward;
-    if (entering && !panelReduceMotion(context)) {
-      _zoom.value = 0;
-      _zoom.springTo(1, PanelSprings.dialog);
-    }
-  }
-
-  @override
-  void dispose() {
-    _zoom.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([widget.animation, _zoom]),
-      child: widget.child,
-      builder: (context, child) {
-        final value = widget.animation.value;
-        var opacity = panelEase.transform(value.clamp(0.0, 1.0));
-        if (widget.animation.status == AnimationStatus.reverse) {
-          opacity *= _contentExit.transform(value.clamp(0.0, 1.0));
-        }
-        return Opacity(
-          opacity: opacity,
-          alwaysIncludeSemantics: true,
-          child: Transform.scale(scale: _zoom.value, child: child),
-        );
-      },
-    );
-  }
-}
-
-/// Whether a dialog's footer draws a surface of its own.
-enum PanelDialogFooterVariant {
-  /// Part of the dialog: the same fill, under the content with a gap above.
-  plain,
-
-  /// A band set into the dialog: a rule across the top, a step darker, out
-  /// to the dialog's edges and bottom corners. It separates what the dialog
-  /// says from what you can do about it, which is worth it on a dialog with
-  /// a form in it, where the buttons are otherwise one more row of fields.
-  panel,
 }
 
 /// The box a dialog is drawn in: a title, a description, a body and a row of
@@ -296,7 +270,8 @@ enum PanelDialogFooterVariant {
 ///
 /// It fills the width it is given up to [maxWidth] (`max-w-sm`, 384pt). When
 /// the content is taller than the room there is, [child] scrolls between the
-/// heading and the actions, which stay put.
+/// heading and the actions, which stay put; PanelUI's dialog would run off
+/// the screen instead.
 class PanelDialog extends StatelessWidget {
   /// Creates a dialog box.
   const PanelDialog({
@@ -337,118 +312,32 @@ class PanelDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     final c = theme.colors;
-    final panelFooter =
-        actions.isNotEmpty && footerVariant == PanelDialogFooterVariant.panel;
-    final radius = theme.radii.xxl;
-
-    // A row at the end, as in PanelUI. Where the labels cannot fit across
-    // (a narrow screen, a large text size) the actions stack instead of
-    // overflowing.
-    final row = OverflowBar(
-      alignment: MainAxisAlignment.end,
-      spacing: 8,
-      overflowSpacing: 8,
-      overflowAlignment: OverflowBarAlignment.end,
-      children: actions,
-    );
-
-    Widget dialog = LayoutBuilder(
-      builder: (context, constraints) {
-        // Inside a route the dialog has a height to stay within, and the body
-        // gives way; laid out in a scrolling page it is as tall as it is.
-        final bounded = constraints.hasBoundedHeight;
-        Widget? body = child;
-        if (body != null) {
-          body = DefaultTextStyle(
-            style: theme.typography.style(
-              PanelTextSize.base,
-              color: c.foreground,
-            ),
-            child: body,
-          );
-          if (bounded) {
-            body = Flexible(child: SingleChildScrollView(child: body));
-          }
-        }
-
-        final content = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 6,
-          children: [
-            if (title != null) PanelDialogTitle(child: title!),
-            if (description != null)
-              PanelDialogDescription(child: description!),
-            ?body,
-            if (actions.isNotEmpty && !panelFooter)
-              Padding(padding: const EdgeInsets.only(top: 16), child: row),
-          ],
-        );
-
-        final padded = Padding(
-          padding: EdgeInsets.fromLTRB(
-            _dialogPadding,
-            _dialogPadding,
-            _dialogPadding,
-            panelFooter ? 0 : _dialogPadding,
-          ),
-          child: content,
-        );
-        if (!panelFooter) return padded;
-
-        // The band's corners follow the inside of the dialog's border, so the
-        // tint does not paint over the hairline where the two curves meet.
-        final inner = Radius.circular((radius - 1).clamp(0.0, radius));
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (bounded) Flexible(child: padded) else padded,
-            Container(
-              // `gap-1.5` from the content, then `mt-5`.
-              margin: const EdgeInsets.only(top: 6 + 20),
-              padding: const EdgeInsets.symmetric(
-                horizontal: _dialogPadding,
-                vertical: 16,
-              ),
-              decoration: BoxDecoration(
-                color: c.inset,
-                border: Border(top: BorderSide(color: c.border)),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: inner,
-                  bottomRight: inner,
-                ),
-              ),
-              child: row,
-            ),
-          ],
-        );
-      },
-    );
-
-    dialog = ConstrainedBox(
+    Widget dialog = Container(
+      width: double.infinity,
       constraints: BoxConstraints(maxWidth: maxWidth),
-      child: SizedBox(
-        width: double.infinity,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: c.popover,
-            border: Border.all(color: c.border),
-            borderRadius: BorderRadius.circular(radius),
-            boxShadow: theme.shadows.lg,
-          ),
-          child: Padding(
-            // The border's own width, which a CSS border-box sits inside.
-            padding: const EdgeInsets.all(1),
-            child: IconTheme.merge(
-              data: IconThemeData(color: c.foreground),
-              child: dialog,
-            ),
+      decoration: BoxDecoration(
+        color: c.popover,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(theme.radii.xxl),
+        boxShadow: theme.shadows.lg,
+      ),
+      child: IconTheme.merge(
+        data: IconThemeData(color: c.foreground),
+        // In a route the dialog has a height to keep within, and its body
+        // gives way and scrolls; laid out in a scrolling page it is as tall
+        // as it is.
+        child: LayoutBuilder(
+          builder: (context, constraints) => _DialogLayout(
+            bounded: constraints.hasBoundedHeight,
+            title: title,
+            description: description,
+            body: child,
+            actions: actions,
+            footerVariant: footerVariant,
           ),
         ),
       ),
     );
-
     if (semanticLabel != null) {
       dialog = Semantics(
         namesRoute: true,
@@ -475,7 +364,6 @@ class PanelDialogTitle extends StatelessWidget {
     final theme = PanelTheme.of(context);
     return Semantics(
       container: true,
-      header: true,
       namesRoute: true,
       child: DefaultTextStyle(
         style: theme.typography.style(
@@ -504,6 +392,209 @@ class PanelDialogDescription extends StatelessWidget {
       style: theme.typography.style(
         PanelTextSize.sm,
         color: theme.colors.mutedForeground,
+      ),
+      child: child,
+    );
+  }
+}
+
+/// The dialog's own motion inside the route's: a fade that matches the
+/// layer's, a spring zoom in from nothing (`ZoomIn` with PanelUI's dialog
+/// spring), and a quicker fade out.
+class _DialogTransition extends StatefulWidget {
+  const _DialogTransition({required this.animation, required this.child});
+
+  /// The route's animation: the layer's 150ms fade.
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  State<_DialogTransition> createState() => _DialogTransitionState();
+}
+
+class _DialogTransitionState extends State<_DialogTransition>
+    with SingleTickerProviderStateMixin {
+  // Unbounded, so the spring's overshoot past full size survives.
+  late final AnimationController _zoom = AnimationController.unbounded(
+    vsync: this,
+    value: 1,
+  );
+  late Listenable _ticks = Listenable.merge([widget.animation, _zoom]);
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    // A route added without a transition (restored, say) arrives at rest.
+    final entering = widget.animation.status == AnimationStatus.forward;
+    if (entering && !panelReduceMotion(context)) {
+      _zoom.value = 0;
+      _zoom.springTo(1, PanelSprings.dialog);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_DialogTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.animation != oldWidget.animation) {
+      _ticks = Listenable.merge([widget.animation, _zoom]);
+    }
+  }
+
+  @override
+  void dispose() {
+    _zoom.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ticks,
+      // Its own layer, so the zoom moves a finished picture of the dialog
+      // rather than repainting it on every frame.
+      child: RepaintBoundary(child: widget.child),
+      builder: (context, child) {
+        final route = widget.animation;
+        var opacity = panelEase.transform(route.value);
+        if (route.status == AnimationStatus.reverse) {
+          opacity *= _boxExit.transform(route.value);
+        }
+        return Opacity(
+          opacity: opacity,
+          alwaysIncludeSemantics: true,
+          child: Transform.scale(scale: _zoom.value, child: child),
+        );
+      },
+    );
+  }
+}
+
+/// The inside of a dialog: the heading, the body and the footer.
+class _DialogLayout extends StatelessWidget {
+  const _DialogLayout({
+    required this.bounded,
+    required this.title,
+    required this.description,
+    required this.body,
+    required this.actions,
+    required this.footerVariant,
+  });
+
+  /// Whether there is a height to keep within, so the body has to scroll.
+  final bool bounded;
+  final Widget? title;
+  final Widget? description;
+  final Widget? body;
+  final List<Widget> actions;
+  final PanelDialogFooterVariant footerVariant;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final panel =
+        actions.isNotEmpty && footerVariant == PanelDialogFooterVariant.panel;
+
+    Widget? content = body;
+    if (content != null) {
+      content = DefaultTextStyle(
+        style: theme.typography.style(
+          PanelTextSize.base,
+          color: theme.colors.foreground,
+        ),
+        child: content,
+      );
+      if (bounded) {
+        content = Flexible(child: SingleChildScrollView(child: content));
+      }
+    }
+
+    final column = Padding(
+      // A panel footer reaches the bottom edge itself, in place of the padding.
+      padding: EdgeInsets.fromLTRB(
+        _dialogPadding,
+        _dialogPadding,
+        _dialogPadding,
+        panel ? 0 : _dialogPadding,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: _gap,
+        children: [
+          if (title != null) PanelDialogTitle(child: title!),
+          if (description != null) PanelDialogDescription(child: description!),
+          ?content,
+          if (actions.isNotEmpty && !panel)
+            Padding(
+              padding: const EdgeInsets.only(top: _plainFooterMargin),
+              child: _DialogActions(actions: actions),
+            ),
+        ],
+      ),
+    );
+    if (!panel) return column;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (bounded) Flexible(child: column) else column,
+        _DialogFooterBand(child: _DialogActions(actions: actions)),
+      ],
+    );
+  }
+}
+
+/// The footer's buttons: a row at the end, `flex-row justify-end gap-2`.
+///
+/// Where the labels cannot fit across (a narrow screen, a large text size)
+/// they stack instead, which a flex row in PanelUI would not do: there they
+/// would run out of the dialog.
+class _DialogActions extends StatelessWidget {
+  const _DialogActions({required this.actions});
+
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return OverflowBar(
+      alignment: MainAxisAlignment.end,
+      spacing: _actionGap,
+      overflowSpacing: _actionGap,
+      overflowAlignment: OverflowBarAlignment.end,
+      children: actions,
+    );
+  }
+}
+
+/// A panel footer: a band in the `inset` tint with a rule across the top,
+/// bled out through the dialog's padding to its edges and bottom corners
+/// (`mt-5 rounded-b-2xl border-t border-border bg-inset`, 16pt above and
+/// below the buttons).
+class _DialogFooterBand extends StatelessWidget {
+  const _DialogFooterBand({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final corner = Radius.circular(theme.radii.xxl);
+    return Container(
+      margin: const EdgeInsets.only(top: _gap + _panelFooterMargin),
+      padding: const EdgeInsets.symmetric(
+        horizontal: _dialogPadding,
+        vertical: _panelFooterPaddingY,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colors.inset,
+        border: Border(top: BorderSide(color: theme.colors.border)),
+        borderRadius: BorderRadius.only(
+          bottomLeft: corner,
+          bottomRight: corner,
+        ),
       ),
       child: child,
     );
