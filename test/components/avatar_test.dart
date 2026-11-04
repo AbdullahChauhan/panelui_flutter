@@ -234,6 +234,25 @@ void main() {
     expect(border.top.color, PanelThemeData.panelLight.colors.background);
   });
 
+  testWidgets('faces of different sizes line up along their tops', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        const PanelAvatarGroup(
+          size: PanelAvatarSize.sm,
+          children: [
+            PanelAvatar(fallback: 'A'),
+            PanelAvatar(fallback: 'B', size: PanelAvatarSize.lg),
+          ],
+        ),
+      ),
+    );
+    final a = tester.getRect(find.widgetWithText(PanelAvatar, 'A'));
+    final b = tester.getRect(find.widgetWithText(PanelAvatar, 'B'));
+    expect(a.top, b.top);
+  });
+
   testWidgets('a group runs from the right in a right-to-left layout', (
     tester,
   ) async {

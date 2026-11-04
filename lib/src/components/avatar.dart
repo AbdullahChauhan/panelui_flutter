@@ -29,11 +29,6 @@ enum PanelAvatarSize {
   final PanelTextSize textSize;
 }
 
-/// How much of each avatar the next one in a [PanelAvatarGroup] covers, as a
-/// share of its diameter. A third is enough for the faces to read as one
-/// group and still leaves the widest part of every face visible.
-const double _overlapRatio = 0.32;
-
 /// A person as a picture, with their initials when there is no picture.
 ///
 /// ```dart
@@ -140,7 +135,9 @@ class PanelAvatar extends StatelessWidget {
     final overlay = badge;
     if (overlay == null) return avatar;
     // The face clips to its circle, which would cut a corner badge in half,
-    // so the badge hangs off an unclipped stack around it.
+    // so the badge hangs off an unclipped stack around it, 4pt past the
+    // corner and ringed 2pt in the page background (PanelUI's `-top-1 -end-1
+    // rounded-full border-2 border-background`).
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -149,9 +146,10 @@ class PanelAvatar extends StatelessWidget {
           top: -4,
           end: -4,
           child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: c.background, width: 2),
-              borderRadius: BorderRadius.circular(999),
+            decoration: ShapeDecoration(
+              shape: StadiumBorder(
+                side: BorderSide(color: c.background, width: 2),
+              ),
             ),
             child: overlay,
           ),
@@ -159,19 +157,6 @@ class PanelAvatar extends StatelessWidget {
       ],
     );
   }
-}
-
-class _AvatarGroupScope extends InheritedWidget {
-  const _AvatarGroupScope({required this.size, required super.child});
-
-  final PanelAvatarSize size;
-
-  static _AvatarGroupScope? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_AvatarGroupScope>();
-
-  @override
-  bool updateShouldNotify(_AvatarGroupScope oldWidget) =>
-      size != oldWidget.size;
 }
 
 /// A row of avatars, each sliding under the one before it, with the people
@@ -279,8 +264,26 @@ class PanelAvatarGroup extends StatelessWidget {
   }
 }
 
-/// Lays its children out in a row, each overlapping the one before it by
-/// [overlap], and paints them so the first is on top.
+/// How much of each avatar the next one in a [PanelAvatarGroup] covers, as a
+/// share of its diameter. A third is enough for the faces to read as one
+/// group and still leaves the widest part of every face visible.
+const double _overlapRatio = 0.32;
+
+class _AvatarGroupScope extends InheritedWidget {
+  const _AvatarGroupScope({required this.size, required super.child});
+
+  final PanelAvatarSize size;
+
+  static _AvatarGroupScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_AvatarGroupScope>();
+
+  @override
+  bool updateShouldNotify(_AvatarGroupScope oldWidget) =>
+      size != oldWidget.size;
+}
+
+/// Lays its children out in a row along their top edges, each overlapping the
+/// one before it by [overlap], and paints them so the first is on top.
 class _AvatarStack extends MultiChildRenderObjectWidget {
   const _AvatarStack({required this.overlap, required super.children});
 
@@ -397,10 +400,9 @@ class _RenderAvatarStack extends RenderBox
       final x = _textDirection == TextDirection.ltr
           ? starts[i]
           : size.width - starts[i] - childSize.width;
-      (child.parentData! as _AvatarStackParentData).offset = Offset(
-        x,
-        (size.height - childSize.height) / 2,
-      );
+      // At the top: PanelUI's row stretches each face's wrapper to the
+      // tallest, and a face of a smaller size sits at the top of its own.
+      (child.parentData! as _AvatarStackParentData).offset = Offset(x, 0);
       child = childAfter(child);
       i++;
     }
