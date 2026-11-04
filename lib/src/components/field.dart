@@ -4,16 +4,28 @@ import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 import 'label.dart';
 
+/// How a [PanelFieldSet]'s legend is set.
+enum PanelFieldLegendStyle {
+  /// A section heading: 16px, semibold.
+  legend,
+
+  /// A field label: 14px, medium.
+  label,
+}
+
 /// The layout and validation-state kit a form control composes into.
 ///
 /// PanelUI's own controls already carry a label, a description and an error,
 /// so most fields need no wrapper. [PanelField] is for what does not fit that
 /// shape: a control with its label beside it (a switch in a settings list),
-/// or a control that has no label of its own.
+/// or a control that has no label of its own. Its [isInvalid], [isDisabled]
+/// and [isRequired] reach the label it draws, so a field states them once.
 ///
 /// Horizontally, the title, description and control are merged into one
 /// accessibility node, so a screen reader announces "Marketing emails,
-/// product updates at most weekly, switch, on" as one thing.
+/// product updates at most weekly, switch, on" as one thing. That is what
+/// PanelUI's labelled-by relationship does on Android; Flutter has no such
+/// relationship, so the row is read as one.
 ///
 /// ```dart
 /// PanelField(
@@ -23,6 +35,11 @@ import 'label.dart';
 ///   child: PanelSwitch(value: on, onChanged: (v) => setState(() => on = v)),
 /// )
 /// ```
+///
+/// The rest of PanelUI's kit: [PanelFieldSet] groups fields under a legend,
+/// [PanelFieldError] lists validation messages on its own, a `Column` with a
+/// spacing of 24 is `Field.Group`, and a `PanelSeparator` with a label is
+/// `Field.Separator`.
 class PanelField extends StatelessWidget {
   /// Creates a field around [child].
   const PanelField({
@@ -54,14 +71,16 @@ class PanelField extends StatelessWidget {
   /// A muted line explaining the field.
   final String? description;
 
-  /// Validation messages. Duplicates are dropped; one shows as a line, more
-  /// than one as a bulleted list. Any message marks the field invalid.
-  final List<String> errors;
+  /// Validation messages, as a form's validators return them. Empty and
+  /// repeated messages are dropped; one shows as a line, more than one as a
+  /// bulleted list. Any message marks the field invalid.
+  final List<String?> errors;
 
   /// Draws the label in its error colour without a message.
   final bool isInvalid;
 
-  /// Dims the field to 64% opacity.
+  /// Dims the field to 64% opacity. The control is not disabled by it: give
+  /// the control its own disabled state too.
   final bool isDisabled;
 
   /// Marks the label as required.
@@ -71,38 +90,38 @@ class PanelField extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     final c = theme.colors;
-    final invalid = isInvalid || errors.isNotEmpty;
+    final messages = _messages(errors);
 
-    final labelWidget = label == null
+    final label = this.label == null
         ? null
         : PanelLabel(
-            label!,
+            this.label!,
             isRequired: isRequired,
-            isInvalid: invalid,
+            isInvalid: isInvalid || messages.isNotEmpty,
             isDisabled: isDisabled,
           );
-    final titleWidget = title == null
+    final title = this.title == null
         ? null
         : Text(
-            title!,
+            this.title!,
             style: theme.typography.style(
               PanelTextSize.base,
               weight: FontWeight.w500,
               color: c.foreground,
             ),
           );
-    final descriptionWidget = description == null
+    final description = this.description == null
         ? null
         : Text(
-            description!,
+            this.description!,
             style: theme.typography.style(
               PanelTextSize.sm,
               color: c.mutedForeground,
             ),
           );
-    final errorWidget = errors.isEmpty ? null : PanelFieldError(errors: errors);
+    final error = messages.isEmpty ? null : PanelFieldError(errors: messages);
 
-    Widget field;
+    final Widget field;
     if (orientation == Axis.horizontal) {
       field = MergeSemantics(
         child: Row(
@@ -112,12 +131,7 @@ class PanelField extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: 2,
-                children: [
-                  ?labelWidget,
-                  ?titleWidget,
-                  ?descriptionWidget,
-                  ?errorWidget,
-                ],
+                children: [?label, ?title, ?description, ?error],
               ),
             ),
             child,
@@ -129,14 +143,11 @@ class PanelField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 8,
         children: [
-          if (labelWidget != null || titleWidget != null)
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: labelWidget ?? titleWidget,
-            ),
+          for (final heading in [?label, ?title])
+            Align(alignment: AlignmentDirectional.centerStart, child: heading),
           child,
-          ?descriptionWidget,
-          ?errorWidget,
+          ?description,
+          ?error,
         ],
       );
     }
@@ -145,28 +156,28 @@ class PanelField extends StatelessWidget {
 }
 
 /// Validation messages for a field, announced as they appear.
+///
+/// Empty and repeated messages are dropped. One message is a line of text;
+/// more than one is a bulleted list, one message to a line.
 class PanelFieldError extends StatelessWidget {
   /// Creates an error list.
   const PanelFieldError({super.key, required this.errors});
 
-  /// The messages. Duplicates are dropped.
-  final List<String> errors;
+  /// The messages, as a form's validators return them.
+  final List<String?> errors;
 
   @override
   Widget build(BuildContext context) {
+    final messages = _messages(errors);
+    if (messages.isEmpty) return const SizedBox.shrink();
     final theme = PanelTheme.of(context);
     final style = theme.typography.style(
       PanelTextSize.sm,
       color: theme.colors.destructive,
     );
-    final messages = <String>[];
-    for (final e in errors) {
-      if (e.isNotEmpty && !messages.contains(e)) messages.add(e);
-    }
-    if (messages.isEmpty) return const SizedBox.shrink();
     return Semantics(
-      liveRegion: true,
       container: true,
+      liveRegion: true,
       child: messages.length == 1
           ? Text(messages.single, style: style)
           : Column(
@@ -237,11 +248,10 @@ class PanelFieldSet extends StatelessWidget {
   }
 }
 
-/// How a [PanelFieldSet]'s legend is set.
-enum PanelFieldLegendStyle {
-  /// A section heading: 16px, semibold.
-  legend,
-
-  /// A field label: 14px, medium.
-  label,
-}
+/// [errors] without the empty and repeated ones, in their first order.
+List<String> _messages(List<String?> errors) => [
+  ...{
+    for (final message in errors)
+      if (message != null && message.isNotEmpty) message,
+  },
+];
