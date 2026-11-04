@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -9,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import '../foundation/panel_pressable.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
+import '../theme/panel_theme_data.dart';
 import '../theme/panel_typography.dart';
 
 /// How a [PanelTabsList] marks the selected tab.
@@ -52,92 +54,6 @@ enum PanelTabsSize {
 
   /// 18px labels.
   xl,
-}
-
-/// A swipe past this share of a panel's width changes tab on release.
-const double _swipeDistanceRatio = 0.25;
-
-/// …or past this speed, however short it was, in points per second.
-const double _swipeVelocity = 500;
-
-/// How much of the finger's travel the strip follows past either end.
-const double _swipeResistanceAtEnd = 0.16;
-
-/// The gap between an expanding tab's icon and its label, which is part of
-/// what opens.
-const double _labelGap = 6;
-
-/// How long an expanding tab takes to open its label, and the one before it
-/// to close. A curve rather than a spring: this animates a width, and a
-/// spring's overshoot would slide the last letter in, out and in again.
-const Duration _expandDuration = Duration(milliseconds: 260);
-const Curve _expandCurve = Cubic(0.2, 0, 0, 1);
-
-/// The label's colour change, as PanelUI's web tabs `transition-colors`.
-const Duration _labelColorDuration = Duration(milliseconds: 200);
-
-/// Vertical padding of a trigger, by variant and then by size.
-const Map<PanelTabsVariant, List<double>> _triggerPadding = {
-  PanelTabsVariant.segmented: [2, 4, 6, 8, 10],
-  PanelTabsVariant.underline: [6, 8, 10, 12, 14],
-  PanelTabsVariant.pill: [4, 6, 8, 10, 12],
-  PanelTabsVariant.expanding: [6, 8, 10, 12, 14],
-};
-
-/// Horizontal padding of an expanding pill.
-double _expandingPadding(PanelTabsSize size, bool scrollable) {
-  switch (size) {
-    case PanelTabsSize.xs:
-      return 10;
-    case PanelTabsSize.sm:
-      return 12;
-    case PanelTabsSize.md:
-      // PanelUI's scroller padding (`px-4`) wins over the pill's own at the
-      // one size with no padding of its own in the compound table.
-      return scrollable ? 16 : 14;
-    case PanelTabsSize.lg:
-      return 16;
-    case PanelTabsSize.xl:
-      return 20;
-  }
-}
-
-TextStyle _labelStyle(PanelTypography type, PanelTabsSize size, Color color) {
-  const weight = FontWeight.w500;
-  switch (size) {
-    case PanelTabsSize.xs:
-      return type.style(PanelTextSize.xs, weight: weight, color: color);
-    case PanelTabsSize.sm:
-      return type.sized(13, weight: weight, color: color);
-    case PanelTabsSize.md:
-      return type.style(PanelTextSize.sm, weight: weight, color: color);
-    case PanelTabsSize.lg:
-      return type.style(PanelTextSize.base, weight: weight, color: color);
-    case PanelTabsSize.xl:
-      return type.style(PanelTextSize.lg, weight: weight, color: color);
-  }
-}
-
-Color _fade(Color color, double factor) =>
-    color.withValues(alpha: color.a * factor);
-
-/// Springs [controller] to [target] starting at [velocity] rather than at the
-/// controller's own, for a strip released by a finger that was moving it.
-TickerFuture _springFrom(
-  AnimationController controller,
-  double target,
-  double velocity,
-) {
-  return controller.animateWith(
-    SpringSimulation(
-      PanelSprings.strip,
-      controller.value,
-      target,
-      velocity,
-      tolerance: const Tolerance(distance: 0.0005, velocity: 0.005),
-      snapToEnd: true,
-    ),
-  );
 }
 
 /// A set of tabs: a row of triggers and the panel of the selected one.
@@ -242,17 +158,17 @@ class _PanelTabsState<T> extends State<PanelTabs<T>> {
   @override
   Widget build(BuildContext context) {
     final value = _value;
-    final List<PanelTabsContent<Object?>> panels = widget.swipeable
-        ? [
+    final panels = widget.swipeable
+        ? <PanelTabsContent<Object?>>[
             for (final child in widget.children)
               if (child is PanelTabsContent) child,
           ]
-        : const [];
+        : const <PanelTabsContent<Object?>>[];
     final paged = panels.isNotEmpty;
 
-    // The 12pt gap goes only between children that take up room, as a gap
-    // does in PanelUI's flex column: an unselected panel is not there at all,
-    // and a kept one is out of the layout.
+    // The gap goes only between children that take up room, as a gap does in
+    // a flex column: an unselected panel is not built, and a kept one is out
+    // of the layout.
     final items = <Widget>[];
     var shown = false;
     for (final child in widget.children) {
@@ -261,44 +177,11 @@ class _PanelTabsState<T> extends State<PanelTabs<T>> {
       items.add(
         Padding(
           key: child.key == null ? null : ValueKey<Key>(child.key!),
-          padding: EdgeInsets.only(top: visible && shown ? 12 : 0),
+          padding: EdgeInsets.only(top: visible && shown ? _tabSetGap : 0),
           child: child,
         ),
       );
       if (visible) shown = true;
-    }
-
-    Widget body;
-    if (paged) {
-      final pager = Padding(
-        padding: EdgeInsets.only(top: shown ? 12 : 0),
-        child: _TabsPager(
-          panels: panels,
-          value: value,
-          select: _select,
-          keepMounted: widget.keepMounted,
-          animated: widget.animated,
-        ),
-      );
-      body = LayoutBuilder(
-        builder: (context, constraints) {
-          final fill = constraints.hasBoundedHeight;
-          return Column(
-            mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ...items,
-              Flexible(flex: fill ? 1 : 0, fit: FlexFit.tight, child: pager),
-            ],
-          );
-        },
-      );
-    } else {
-      body = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: items,
-      );
     }
 
     return _TabsScope(
@@ -308,63 +191,27 @@ class _PanelTabsState<T> extends State<PanelTabs<T>> {
       size: widget.size,
       keepMounted: widget.keepMounted,
       animated: widget.animated,
-      child: body,
+      child: paged
+          ? _PagedColumn(
+              pager: Padding(
+                padding: EdgeInsets.only(top: shown ? _tabSetGap : 0),
+                child: _TabsPager(
+                  panels: panels,
+                  value: value,
+                  select: _select,
+                  keepMounted: widget.keepMounted,
+                  animated: widget.animated,
+                ),
+              ),
+              children: items,
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: items,
+            ),
     );
   }
-}
-
-class _TabsScope extends InheritedWidget {
-  const _TabsScope({
-    required this.value,
-    required this.select,
-    required this.variant,
-    required this.size,
-    required this.keepMounted,
-    required this.animated,
-    required super.child,
-  });
-
-  final Object? value;
-  final ValueChanged<Object?> select;
-  final PanelTabsVariant variant;
-  final PanelTabsSize size;
-  final bool keepMounted;
-  final bool animated;
-
-  static _TabsScope of(BuildContext context, String part) {
-    final scope = context.dependOnInheritedWidgetOfExactType<_TabsScope>();
-    if (scope == null) {
-      throw FlutterError('$part must be used inside a PanelTabs.');
-    }
-    return scope;
-  }
-
-  @override
-  bool updateShouldNotify(_TabsScope oldWidget) =>
-      value != oldWidget.value ||
-      select != oldWidget.select ||
-      variant != oldWidget.variant ||
-      size != oldWidget.size ||
-      keepMounted != oldWidget.keepMounted ||
-      animated != oldWidget.animated;
-}
-
-/// Whether the triggers below sit in a scroller, published by their list so
-/// a trigger's width and the row it is measured in agree in the same frame.
-class _TabsListScope extends InheritedWidget {
-  const _TabsListScope({required this.scrollable, required super.child});
-
-  final bool scrollable;
-
-  static bool scrollableOf(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<_TabsListScope>()
-          ?.scrollable ??
-      false;
-
-  @override
-  bool updateShouldNotify(_TabsListScope oldWidget) =>
-      scrollable != oldWidget.scrollable;
 }
 
 /// The row of triggers in a [PanelTabs], with the indicator that slides to
@@ -419,13 +266,15 @@ class PanelTabsList extends StatefulWidget {
 
 class _PanelTabsListState extends State<PanelTabsList>
     with TickerProviderStateMixin {
-  late final AnimationController _x = AnimationController.unbounded(
+  late final AnimationController _indicatorLeft = AnimationController.unbounded(
     vsync: this,
   );
-  late final AnimationController _w = AnimationController.unbounded(
-    vsync: this,
-  );
-  late final Listenable _repaint = Listenable.merge([_x, _w]);
+  late final AnimationController _indicatorWidth =
+      AnimationController.unbounded(vsync: this);
+  late final Listenable _indicatorMoved = Listenable.merge([
+    _indicatorLeft,
+    _indicatorWidth,
+  ]);
   final _TabsRowGeometry _geometry = _TabsRowGeometry();
   final ScrollController _scroll = ScrollController();
 
@@ -435,7 +284,7 @@ class _PanelTabsListState extends State<PanelTabsList>
 
   /// Whether the indicator has been placed once. Its first placement snaps:
   /// there is nothing to animate from.
-  bool _initialized = false;
+  bool _placed = false;
 
   /// Where the indicator was last sent.
   Rect? _target;
@@ -455,13 +304,13 @@ class _PanelTabsListState extends State<PanelTabsList>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final previous = _scope?.value;
-    _scope = _TabsScope.of(context, 'PanelTabsList');
+    final scope = _scope = _TabsScope.of(context, 'PanelTabsList');
     _reduceMotion = panelReduceMotion(context);
-    if (previous != _scope!.value) {
-      // A press is answered at once, from the triggers as they were measured
-      // last frame. The scroller follows at the end of the frame, which also
-      // corrects the indicator if the row has moved since.
-      if (_initialized) _syncIndicator();
+    if (previous != scope.value) {
+      // A press is answered at once, from the triggers as they were laid out
+      // last frame. The end of the frame corrects the indicator if the row
+      // has moved since, and brings the selection into view.
+      if (_placed) _syncIndicator();
       _scheduleSync();
     }
   }
@@ -469,50 +318,52 @@ class _PanelTabsListState extends State<PanelTabsList>
   @override
   void dispose() {
     _geometry.onLayout = null;
-    _x.dispose();
-    _w.dispose();
+    _indicatorLeft.dispose();
+    _indicatorWidth.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  bool get _still => !(_scope?.animated ?? true) || _reduceMotion;
-
+  /// Where the selected trigger was laid out, or null before the row has
+  /// been laid out or while no trigger is selected.
   Rect? get _selectedRect {
-    final scope = _scope;
-    if (scope == null) return null;
+    final value = _scope?.value;
     final rects = _geometry.rects;
     final children = widget.children;
     for (var i = 0; i < children.length && i < rects.length; i++) {
       final child = children[i];
-      if (child is PanelTabsTrigger && child.value == scope.value) {
-        return rects[i];
-      }
+      if (child is PanelTabsTrigger && child.value == value) return rects[i];
     }
     return null;
   }
 
-  /// Where the indicator is drawn: the animated position once it has been
-  /// placed, the selected trigger itself before that.
-  ({double left, double width})? get _indicatorSpan {
-    if (_initialized) return (left: _x.value, width: math.max(0.0, _w.value));
+  /// Where the indicator is drawn: wherever it has been animated to once it
+  /// has been placed, and on the selected trigger itself before that, so the
+  /// first frame is already right.
+  _IndicatorSpan? _indicatorSpan() {
+    if (_placed) {
+      return (
+        left: _indicatorLeft.value,
+        width: math.max(0.0, _indicatorWidth.value),
+      );
+    }
     final rect = _selectedRect;
-    if (rect == null) return null;
-    return (left: rect.left, width: rect.width);
+    return rect == null ? null : (left: rect.left, width: rect.width);
+  }
+
+  /// Where the scroller puts the selected tab: a little in from the leading
+  /// edge rather than flush against it, so it does not read as the last tab
+  /// in the row.
+  double _scrollOffsetFor(Rect rect) {
+    final start = _rtl ? _geometry.size.width - rect.right : rect.left;
+    return math.max(start - _scrollLeadIn, 0);
   }
 
   bool _sameSpan(Rect? a, Rect b) =>
       a != null && a.left == b.left && a.width == b.width;
 
-  /// Where the selected tab should sit in the scroller: a little in from the
-  /// edge rather than flush against it, so it does not read as the last tab.
-  double _scrollOffsetFor(Rect rect) {
-    final inset = _scope?.variant == PanelTabsVariant.segmented ? 4.0 : 0.0;
-    final start = _rtl ? _geometry.size.width - rect.right : rect.left;
-    return math.max(start + inset - 24, 0);
-  }
-
-  /// Runs during the row's layout: anything that moves is left to the end of
-  /// the frame.
+  /// Runs during the row's layout, so anything that moves waits for the end
+  /// of the frame.
   void _handleLayout() {
     if (_syncScheduled) return;
     final scope = _scope;
@@ -520,12 +371,13 @@ class _PanelTabsListState extends State<PanelTabsList>
     if (scope == null || rect == null) return;
     final indicatorStale =
         scope.variant != PanelTabsVariant.expanding &&
-        (!_initialized || !_sameSpan(_target, rect));
+        (!_placed || !_sameSpan(_target, rect));
+    final scrolled = _scrolled;
     final scrollStale =
         widget.scrollable &&
-        (_scrolled == null ||
-            _scrolled!.value != scope.value ||
-            _scrolled!.offset != _scrollOffsetFor(rect));
+        (scrolled == null ||
+            scrolled.value != scope.value ||
+            scrolled.offset != _scrollOffsetFor(rect));
     if (indicatorStale || scrollStale) _scheduleSync();
   }
 
@@ -541,104 +393,127 @@ class _PanelTabsListState extends State<PanelTabsList>
   }
 
   void _syncIndicator() {
-    final scope = _scope;
     final rect = _selectedRect;
-    if (scope == null ||
-        rect == null ||
-        scope.variant == PanelTabsVariant.expanding) {
-      return;
-    }
-    if (!_initialized || _still) {
-      _x.value = rect.left;
-      _w.value = rect.width;
-      _initialized = true;
+    final scope = _scope;
+    if (rect == null || scope == null) return;
+    if (scope.variant == PanelTabsVariant.expanding) return;
+    if (!_placed || !scope.animated || _reduceMotion) {
+      _indicatorLeft.value = rect.left;
+      _indicatorWidth.value = rect.width;
+      _placed = true;
     } else if (!_sameSpan(_target, rect)) {
-      _x.springTo(rect.left, PanelSprings.indicator);
-      _w.springTo(rect.width, PanelSprings.indicator);
+      _indicatorLeft.springTo(rect.left, PanelSprings.indicator);
+      _indicatorWidth.springTo(rect.width, PanelSprings.indicator);
     }
     _target = rect;
   }
 
   void _syncScroll() {
-    final scope = _scope;
+    final value = _scope?.value;
     final rect = _selectedRect;
-    if (scope == null || rect == null) return;
-    if (widget.scrollable && _scroll.hasClients) {
-      final offset = _scrollOffsetFor(rect);
-      final scrolled = _scrolled;
-      if (scrolled == null ||
-          scrolled.value != scope.value ||
-          scrolled.offset != offset) {
-        final position = _scroll.position;
-        final target = offset.clamp(
-          position.minScrollExtent,
-          position.maxScrollExtent,
-        );
-        // The first placement has nowhere to travel from: animating it is a
-        // row that visibly slides into place as the screen appears.
-        if (scrolled == null || _still) {
-          position.jumpTo(target);
-        } else {
-          position.animateTo(
-            target,
-            duration: const Duration(milliseconds: 300),
-            curve: panelEase,
-          );
-        }
-        _scrolled = (value: scope.value, offset: offset);
-      }
+    if (!widget.scrollable || rect == null || !_scroll.hasClients) return;
+    final offset = _scrollOffsetFor(rect);
+    final scrolled = _scrolled;
+    if (scrolled != null &&
+        scrolled.value == value &&
+        scrolled.offset == offset) {
+      return;
     }
+    final position = _scroll.position;
+    final target = offset.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    // The first placement has nowhere to travel from: animating it is a row
+    // that visibly slides into place as the screen appears. The scroll is
+    // not one of the animations `animated: false` turns off, as in PanelUI.
+    if (scrolled == null || _reduceMotion) {
+      position.jumpTo(target);
+    } else {
+      position.animateTo(
+        target,
+        duration: _scrollIntoViewDuration,
+        curve: panelEase,
+      );
+    }
+    _scrolled = (value: value, offset: offset);
   }
+
+  /// The indicator for [variant]: a raised chip inside the segmented track,
+  /// a rule on the underline's hairline, or a filled pill.
+  _IndicatorPainter _indicatorPainter(
+    PanelTabsVariant variant,
+    PanelThemeData theme,
+  ) {
+    final c = theme.colors;
+    final segmented = variant == PanelTabsVariant.segmented;
+    return _IndicatorPainter(
+      span: _indicatorSpan,
+      repaint: _indicatorMoved,
+      underline: variant == PanelTabsVariant.underline,
+      color:
+          widget.indicatorColor ??
+          switch (variant) {
+            PanelTabsVariant.segmented => c.popover,
+            PanelTabsVariant.underline => c.foreground,
+            _ => c.primary,
+          },
+      inset: segmented ? _trackPadding : 0,
+      cornerRadius: segmented ? theme.radii.md : null,
+      shadows: segmented ? theme.shadows.sm : const [],
+      thickness: widget.indicatorThickness,
+    );
+  }
+
+  /// What the row is drawn on: the recessed track of `segmented`, or the
+  /// hairline of `underline`, which takes its own pixel of layout as a CSS
+  /// border does.
+  BoxDecoration? _trackDecoration(
+    PanelTabsVariant variant,
+    PanelThemeData theme,
+  ) => switch (variant) {
+    PanelTabsVariant.segmented => BoxDecoration(
+      color: theme.colors.muted,
+      borderRadius: BorderRadius.circular(theme.radii.lg),
+    ),
+    PanelTabsVariant.underline => BoxDecoration(
+      border: Border(bottom: BorderSide(color: theme.colors.border)),
+    ),
+    PanelTabsVariant.pill || PanelTabsVariant.expanding => null,
+  };
 
   @override
   Widget build(BuildContext context) {
-    final scope = _scope!;
+    final variant = _scope!.variant;
     final theme = PanelTheme.of(context);
-    final c = theme.colors;
-    final variant = scope.variant;
-    final expanding = variant == PanelTabsVariant.expanding;
     _rtl = Directionality.of(context) == TextDirection.rtl;
 
     Widget row = _TabsRow(
-      fit: !widget.scrollable && !expanding,
+      fit: !widget.scrollable && variant != PanelTabsVariant.expanding,
       gap: switch (variant) {
         PanelTabsVariant.segmented => 0,
-        PanelTabsVariant.underline => 4,
-        PanelTabsVariant.pill => 4,
+        PanelTabsVariant.underline || PanelTabsVariant.pill => 4,
         PanelTabsVariant.expanding => 6,
       },
-      // A trigger at its natural width gets PanelUI's `px-4` here, so a row
-      // that cannot share its width out still has room around each label.
-      extraWidth: expanding ? 0 : 32,
+      padding: variant == PanelTabsVariant.segmented
+          ? const EdgeInsets.all(_trackPadding)
+          : EdgeInsets.zero,
       alignment: widget.mainAxisAlignment,
       geometry: _geometry,
       children: widget.children,
     );
-
-    if (!expanding) {
-      row = CustomPaint(
-        painter: _IndicatorPainter(
-          list: this,
-          repaint: _repaint,
-          underline: variant == PanelTabsVariant.underline,
-          color:
-              widget.indicatorColor ??
-              switch (variant) {
-                PanelTabsVariant.segmented => c.popover,
-                PanelTabsVariant.underline => c.foreground,
-                _ => c.primary,
-              },
-          cornerRadius: variant == PanelTabsVariant.segmented
-              ? theme.radii.md
-              : null,
-          shadows: variant == PanelTabsVariant.segmented
-              ? theme.shadows.sm
-              : const [],
-          thickness: widget.indicatorThickness,
+    if (variant != PanelTabsVariant.expanding) {
+      row = RepaintBoundary(
+        child: CustomPaint(
+          painter: _indicatorPainter(variant, theme),
+          // Its own layer, so the indicator moving under the labels does not
+          // repaint them.
+          child: RepaintBoundary(child: row),
         ),
-        child: row,
       );
     }
+    final track = _trackDecoration(variant, theme);
+    if (track != null) row = Container(decoration: track, child: row);
 
     final allTriggers =
         widget.children.isNotEmpty &&
@@ -650,28 +525,6 @@ class _PanelTabsListState extends State<PanelTabsList>
       label: widget.semanticLabel,
       child: row,
     );
-
-    switch (variant) {
-      case PanelTabsVariant.segmented:
-        row = Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: c.muted,
-            borderRadius: BorderRadius.circular(theme.radii.lg),
-          ),
-          child: row,
-        );
-      case PanelTabsVariant.underline:
-        row = Container(
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: c.border)),
-          ),
-          child: row,
-        );
-      case PanelTabsVariant.pill:
-      case PanelTabsVariant.expanding:
-        break;
-    }
 
     if (widget.scrollable) {
       // No scrollbar, as in PanelUI: the row is the indicator of its own
@@ -690,70 +543,18 @@ class _PanelTabsListState extends State<PanelTabsList>
   }
 }
 
-/// Paints the indicator under the triggers, at the span the list hands it.
-class _IndicatorPainter extends CustomPainter {
-  _IndicatorPainter({
-    required this.list,
-    required Listenable repaint,
-    required this.underline,
-    required this.color,
-    required this.cornerRadius,
-    required this.shadows,
-    required this.thickness,
-  }) : super(repaint: repaint);
-
-  final _PanelTabsListState list;
-  final bool underline;
-  final Color color;
-
-  /// Null rounds the ends fully.
-  final double? cornerRadius;
-  final List<BoxShadow> shadows;
-  final double thickness;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final span = list._indicatorSpan;
-    if (span == null) return;
-    // The rule sits on the list's hairline: its bottom edge is the bottom of
-    // the 1pt border under this row, as PanelUI's `-bottom-px h-0.5`.
-    final rect = underline
-        ? Rect.fromLTWH(
-            span.left,
-            size.height + 1 - thickness,
-            span.width,
-            thickness,
-          )
-        : Rect.fromLTWH(span.left, 0, span.width, size.height);
-    final rrect = RRect.fromRectAndRadius(
-      rect,
-      Radius.circular(cornerRadius ?? rect.height / 2),
-    );
-    for (final shadow in shadows) {
-      canvas.drawRRect(
-        rrect.shift(shadow.offset).inflate(shadow.spreadRadius),
-        shadow.toPaint(),
-      );
-    }
-    canvas.drawRRect(rrect, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_IndicatorPainter oldDelegate) =>
-      oldDelegate.list != list ||
-      oldDelegate.underline != underline ||
-      oldDelegate.color != color ||
-      oldDelegate.cornerRadius != cornerRadius ||
-      !listEquals(oldDelegate.shadows, shadows) ||
-      oldDelegate.thickness != thickness;
-}
-
 /// One tab in a [PanelTabsList].
 ///
 /// [child] is the label, usually a [Text], styled for the list's size and
-/// coloured by the selection: muted until it is selected (or hovered, with a
-/// mouse). [icon] sits before it and takes the label's colour; [badge], a
-/// count or a dot, sits after it.
+/// coloured by the selection: muted until it is selected, or hovered with a
+/// mouse. [icon] sits before it and [badge], a count or a dot, after it.
+///
+/// An icon keeps the muted colour PanelUI's icons are drawn in by default,
+/// selected or not; give it a colour of its own to change that.
+///
+/// In the two smallest sizes a press up to 12pt (`xs`) or 8pt (`sm`) above or
+/// below a trigger still reaches it, as far as the list's own bounds allow:
+/// the row is drawn smaller than a finger, not pressed smaller.
 class PanelTabsTrigger<T> extends StatelessWidget {
   /// Creates a trigger.
   const PanelTabsTrigger({
@@ -806,6 +607,7 @@ class PanelTabsTrigger<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final scope = _TabsScope.of(context, 'PanelTabsTrigger');
     final active = scope.value == value;
+    final scrollable = _TabsListScope.scrollableOf(context);
     if (scope.variant == PanelTabsVariant.expanding) {
       return _ExpandingTrigger(
         active: active,
@@ -814,7 +616,7 @@ class PanelTabsTrigger<T> extends StatelessWidget {
         badge: badge,
         size: scope.size,
         animated: scope.animated,
-        scrollable: _TabsListScope.scrollableOf(context),
+        scrollable: scrollable,
         labelColor: labelColor,
         activeLabelColor: activeLabelColor,
         activeColor: activeColor,
@@ -828,249 +630,47 @@ class PanelTabsTrigger<T> extends StatelessWidget {
     final c = theme.colors;
     final variant = scope.variant;
     final pill = variant == PanelTabsVariant.pill;
-    final reduce = panelReduceMotion(context);
-    final vertical = _triggerPadding[variant]![scope.size.index];
-    final radius = BorderRadius.circular(pill ? 999 : theme.radii.md);
-    const clear = Color(0x00000000);
+    final shape = pill ? _roundedFull : BorderRadius.circular(theme.radii.md);
 
     return PanelPressable(
       onPressed: enabled ? () => scope.select(value) : null,
       pressScale: 1,
       isButton: false,
+      semanticRole: SemanticsRole.tab,
       selected: active,
       semanticLabel: semanticLabel,
-      focusRingRadius: radius,
+      hitSlop: _triggerHitSlop(scope.size),
+      focusRingRadius: shape,
       builder: (context, state) {
-        final Color color;
-        if (active) {
-          color =
-              activeLabelColor ?? (pill ? c.primaryForeground : c.foreground);
-        } else if (state.hovered && labelColor == null) {
-          color = c.foreground;
-        } else {
-          color = labelColor ?? c.mutedForeground;
-        }
-
-        Widget content = TweenAnimationBuilder<Color?>(
-          tween: ColorTween(end: color),
-          duration: reduce ? Duration.zero : _labelColorDuration,
-          curve: Curves.fastOutSlowIn,
-          builder: (context, value, _) {
-            final resolved = value ?? color;
-            return IconTheme(
-              data: IconThemeData(color: resolved, size: 16),
-              child: DefaultTextStyle(
-                style: _labelStyle(theme.typography, scope.size, resolved),
-                textAlign: TextAlign.center,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 6,
-                  children: [
-                    ?icon,
-                    Flexible(child: child),
-                    ?badge,
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-
-        content = Padding(
-          padding: EdgeInsets.symmetric(vertical: vertical),
-          child: Center(heightFactor: 1, child: content),
-        );
-
-        final hoverDuration = reduce
-            ? Duration.zero
-            : const Duration(milliseconds: 150);
-        if (variant == PanelTabsVariant.underline) {
-          // The web package's hover fill, inside the row and clear of the
-          // rule.
-          content = Stack(
-            // Passed through, so a trigger given more than its natural width
-            // (PanelUI's `px-4` in a scroller) still centres its label.
-            fit: StackFit.passthrough,
-            children: [
-              Positioned(
-                left: 2,
-                right: 2,
-                top: 6,
-                bottom: 6,
-                child: AnimatedContainer(
-                  duration: hoverDuration,
-                  decoration: BoxDecoration(
-                    color: state.hovered ? _fade(c.muted, 0.7) : clear,
-                    borderRadius: BorderRadius.circular(theme.radii.md),
-                  ),
-                ),
-              ),
-              content,
-            ],
-          );
-        } else if (pill) {
-          content = AnimatedContainer(
-            duration: reduce ? Duration.zero : _labelColorDuration,
-            decoration: BoxDecoration(
-              color: !active && state.hovered ? c.muted : clear,
-              borderRadius: radius,
-            ),
-            child: content,
-          );
-        }
-
+        final color = active
+            ? activeLabelColor ?? (pill ? c.primaryForeground : c.foreground)
+            : labelColor ?? (state.hovered ? c.foreground : c.mutedForeground);
         return Opacity(
-          opacity: enabled ? 1 : 0.44,
-          child: Semantics(role: SemanticsRole.tab, child: content),
-        );
-      },
-    );
-  }
-}
-
-/// A tab that is an icon until it is selected, and then an icon and its
-/// label.
-///
-/// The label is never removed, only closed over: a screen reader walking a
-/// row of icons still has something to read, and a label that is always
-/// there has a width to open from.
-class _ExpandingTrigger extends StatefulWidget {
-  const _ExpandingTrigger({
-    required this.active,
-    required this.enabled,
-    required this.icon,
-    required this.badge,
-    required this.size,
-    required this.animated,
-    required this.scrollable,
-    required this.labelColor,
-    required this.activeLabelColor,
-    required this.activeColor,
-    required this.semanticLabel,
-    required this.onPressed,
-    required this.child,
-  });
-
-  final bool active;
-  final bool enabled;
-  final Widget? icon;
-  final Widget? badge;
-  final PanelTabsSize size;
-  final bool animated;
-  final bool scrollable;
-  final Color? labelColor;
-  final Color? activeLabelColor;
-  final Color? activeColor;
-  final String? semanticLabel;
-  final VoidCallback onPressed;
-  final Widget child;
-
-  @override
-  State<_ExpandingTrigger> createState() => _ExpandingTriggerState();
-}
-
-class _ExpandingTriggerState extends State<_ExpandingTrigger>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _open = AnimationController(
-    vsync: this,
-    value: widget.active ? 1 : 0,
-  );
-
-  @override
-  void didUpdateWidget(_ExpandingTrigger oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.active == widget.active) return;
-    final target = widget.active ? 1.0 : 0.0;
-    if (!widget.animated || panelReduceMotion(context)) {
-      _open.value = target;
-    } else {
-      _open.animateTo(target, duration: _expandDuration, curve: _expandCurve);
-    }
-  }
-
-  @override
-  void dispose() {
-    _open.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = PanelTheme.of(context);
-    final c = theme.colors;
-    final color = widget.active
-        ? widget.activeLabelColor ?? c.foreground
-        : widget.labelColor ?? c.mutedForeground;
-    final vertical =
-        _triggerPadding[PanelTabsVariant.expanding]![widget.size.index];
-    final horizontal = _expandingPadding(widget.size, widget.scrollable);
-    final pill = BorderRadius.circular(999);
-
-    final label = Padding(
-      padding: const EdgeInsetsDirectional.only(start: _labelGap),
-      child: DefaultTextStyle(
-        style: _labelStyle(theme.typography, widget.size, color),
-        maxLines: 1,
-        softWrap: false,
-        child: widget.child,
-      ),
-    );
-
-    // The box opens to the label's own width, so the text never reflows on
-    // its way in or out; the text fades in behind the width rather than
-    // ahead of it, so it arrives instead of being wiped on.
-    final reveal = AnimatedBuilder(
-      animation: _open,
-      child: label,
-      builder: (context, label) {
-        final t = _open.value;
-        return ClipRect(
-          child: Align(
-            alignment: AlignmentDirectional.centerStart,
-            widthFactor: math.max(0.0, t),
-            heightFactor: 1,
-            child: Opacity(
-              opacity: ((t - 0.35) / 0.55).clamp(0.0, 1.0),
-              alwaysIncludeSemantics: true,
-              child: label,
-            ),
-          ),
-        );
-      },
-    );
-
-    return PanelPressable(
-      onPressed: widget.enabled ? widget.onPressed : null,
-      pressScale: 1,
-      isButton: false,
-      selected: widget.active,
-      semanticLabel: widget.semanticLabel,
-      focusRingRadius: pill,
-      child: Opacity(
-        opacity: widget.enabled ? 1 : 0.44,
-        child: Semantics(
-          role: SemanticsRole.tab,
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: horizontal,
-              vertical: vertical,
-            ),
-            decoration: BoxDecoration(
-              color: widget.active
-                  ? widget.activeColor ?? c.surfaceTertiary
-                  : c.muted,
-              borderRadius: pill,
-            ),
-            child: IconTheme(
-              data: IconThemeData(color: color, size: 16),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [?widget.icon, reveal, ?widget.badge],
+          opacity: enabled ? 1 : _disabledOpacity,
+          child: _HoverFill(
+            variant: variant,
+            active: active,
+            hovered: state.hovered,
+            shape: shape,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: scrollable ? _scrollerTriggerPaddingX : 0,
+                vertical: _triggerPaddingY(variant, scope.size),
+              ),
+              child: Center(
+                heightFactor: 1,
+                child: _TriggerContent(
+                  color: color,
+                  size: scope.size,
+                  icon: icon,
+                  badge: badge,
+                  label: child,
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -1167,15 +767,901 @@ class _PanelTabsContentState<T> extends State<PanelTabsContent<T>>
   }
 }
 
-/// Marks a panel as sitting in a swipeable strip, and whether it is the one
-/// in view.
-class _PagerSlot extends InheritedWidget {
-  const _PagerSlot({super.key, required this.active, required super.child});
+/// The gap between the children of a tab set (`gap-3`).
+const double _tabSetGap = 12;
 
-  final bool active;
+/// The segmented track's padding around its triggers (`p-1`).
+const double _trackPadding = 4;
+
+/// A trigger's horizontal padding in a scroller (`px-4`), where it keeps its
+/// natural width rather than taking a share of the row.
+const double _scrollerTriggerPaddingX = 16;
+
+/// The gap between a trigger's icon, label and badge (`gap-1.5`), and the
+/// gap an expanding tab opens between its icon and its label.
+const double _contentGap = 6;
+
+/// The size icons in a trigger are drawn at unless they say otherwise, the
+/// size PanelUI's icons default to.
+const double _iconSize = 16;
+
+/// A disabled trigger's opacity (`opacity-[0.44]`).
+const double _disabledOpacity = 0.44;
+
+/// Tailwind's `rounded-full`: a radius past any height, which a rounded
+/// rectangle draws as a stadium.
+const BorderRadius _roundedFull = BorderRadius.all(Radius.circular(999));
+
+/// How far in from the leading edge the scroller brings the selected tab.
+const double _scrollLeadIn = 24;
+
+/// How long the scroller takes to bring the selected tab into view, the
+/// length of a platform's own animated scroll.
+const Duration _scrollIntoViewDuration = Duration(milliseconds: 300);
+
+/// The label's colour change, as PanelUI's web tabs ease it
+/// (`transition-colors duration-200`). The native tabs switch it at once;
+/// one easing on every platform keeps a hover and a selection alike.
+const Duration _labelColorDuration = Duration(milliseconds: 200);
+
+/// The underline hover plate's fade (`before:transition-colors`, Tailwind's
+/// default 150ms).
+const Duration _underlineHoverDuration = Duration(milliseconds: 150);
+
+/// Tailwind's default transition easing, `cubic-bezier(0.4, 0, 0.2, 1)`.
+const Curve _webEase = Curves.fastOutSlowIn;
+
+/// Where the underline hover plate sits inside its trigger (`inset-x-0.5
+/// inset-y-1.5`): inside the row and clear of the rule.
+const EdgeInsets _underlineHoverInset = EdgeInsets.symmetric(
+  horizontal: 2,
+  vertical: 6,
+);
+
+/// How much the underline hover plate keeps of the muted colour
+/// (`bg-muted/70`).
+const double _underlineHoverAlpha = 0.7;
+
+/// How long an expanding tab takes to open its label, and the one before it
+/// to close. A curve rather than a spring: this animates a width, and a
+/// spring's overshoot would slide the last letter in, out and in again.
+const Duration _expandDuration = Duration(milliseconds: 260);
+const Curve _expandCurve = Cubic(0.2, 0, 0, 1);
+
+/// The stretch of an expanding tab's opening over which its label fades in:
+/// behind the width rather than ahead of it, so the text arrives instead of
+/// being wiped on.
+const double _revealFrom = 0.35;
+const double _revealTo = 0.9;
+
+/// Room after an expanding tab's label. PanelUI measures the label and gives
+/// it two points over (`LABEL_SLACK`), so an open pill carries that much
+/// past its text.
+const double _labelSlack = 2;
+
+/// A swipe activates once the finger has travelled this far sideways, and
+/// gives up if it travels [_swipeFailY] up or down first. The window between
+/// them lets a swipe start inside a vertically scrolling panel without
+/// either gesture stealing the other.
+const double _swipeActivateX = 12;
+const double _swipeFailY = 8;
+
+/// A swipe past this share of a panel's width changes tab on release.
+const double _swipeDistanceRatio = 0.25;
+
+/// …or past this speed, however short it was, in points per second.
+const double _swipeVelocity = 500;
+
+/// How much of the finger's travel the strip follows past either end, where
+/// there is no further panel to bring on.
+const double _swipeResistanceAtEnd = 0.16;
+
+/// A trigger's vertical padding. Each variant has its own at `md` (`py-1.5`,
+/// `py-2.5`, `py-2` and `py-2.5`), and each size either side of `md` adds or
+/// takes away half a Tailwind step, as PanelUI's compound variants do.
+double _triggerPaddingY(PanelTabsVariant variant, PanelTabsSize size) {
+  final md = switch (variant) {
+    PanelTabsVariant.segmented => 6.0,
+    PanelTabsVariant.underline || PanelTabsVariant.expanding => 10.0,
+    PanelTabsVariant.pill => 8.0,
+  };
+  return md + (size.index - PanelTabsSize.md.index) * 2;
+}
+
+/// An expanding pill's horizontal padding. In a scroller, PanelUI's `px-4`
+/// replaces the `md` pill's own `px-3.5`; every other size sets its own in
+/// the compound variants, which come later and win.
+double _expandingPaddingX(PanelTabsSize size, {required bool scrollable}) =>
+    switch (size) {
+      PanelTabsSize.xs => 10,
+      PanelTabsSize.sm => 12,
+      PanelTabsSize.md => scrollable ? _scrollerTriggerPaddingX : 14,
+      PanelTabsSize.lg => 16,
+      PanelTabsSize.xl => 20,
+    };
+
+/// Room above and below a trigger of the two smallest sizes, so a row drawn
+/// 20 or 24pt tall is still pressed like a taller one. Vertical only: the
+/// triggers sit edge to edge, and slop to the side would take a neighbour's
+/// presses.
+EdgeInsets? _triggerHitSlop(PanelTabsSize size) => switch (size) {
+  PanelTabsSize.xs => const EdgeInsets.symmetric(vertical: 12),
+  PanelTabsSize.sm => const EdgeInsets.symmetric(vertical: 8),
+  _ => null,
+};
+
+TextStyle _labelStyle(PanelTypography type, PanelTabsSize size, Color color) {
+  const weight = FontWeight.w500;
+  final step = switch (size) {
+    PanelTabsSize.xs => PanelTextSize.xs,
+    // `text-[13px]`, a size with no paired line height.
+    PanelTabsSize.sm => null,
+    PanelTabsSize.md => PanelTextSize.sm,
+    PanelTabsSize.lg => PanelTextSize.base,
+    PanelTabsSize.xl => PanelTextSize.lg,
+  };
+  return step == null
+      ? type.sized(13, weight: weight, color: color)
+      : type.style(step, weight: weight, color: color);
+}
+
+/// Springs [controller] to [target] from [velocity] rather than from the
+/// controller's own: a drag sets the strip's value directly, so it has none
+/// to carry, and a throw has to keep the finger's speed.
+TickerFuture _springFrom(
+  AnimationController controller,
+  double target,
+  double velocity,
+) {
+  return controller.animateWith(
+    SpringSimulation(
+      PanelSprings.strip,
+      controller.value,
+      target,
+      velocity,
+      tolerance: const Tolerance(distance: 0.0005, velocity: 0.005),
+      snapToEnd: true,
+    ),
+  );
+}
+
+class _TabsScope extends InheritedWidget {
+  const _TabsScope({
+    required this.value,
+    required this.select,
+    required this.variant,
+    required this.size,
+    required this.keepMounted,
+    required this.animated,
+    required super.child,
+  });
+
+  final Object? value;
+  final ValueChanged<Object?> select;
+  final PanelTabsVariant variant;
+  final PanelTabsSize size;
+  final bool keepMounted;
+  final bool animated;
+
+  static _TabsScope of(BuildContext context, String part) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_TabsScope>();
+    if (scope == null) {
+      throw FlutterError('$part must be used inside a PanelTabs.');
+    }
+    return scope;
+  }
 
   @override
-  bool updateShouldNotify(_PagerSlot oldWidget) => active != oldWidget.active;
+  bool updateShouldNotify(_TabsScope oldWidget) =>
+      value != oldWidget.value ||
+      select != oldWidget.select ||
+      variant != oldWidget.variant ||
+      size != oldWidget.size ||
+      keepMounted != oldWidget.keepMounted ||
+      animated != oldWidget.animated;
+}
+
+/// Whether the triggers below sit in a scroller, published by their list so
+/// a trigger's width and the row it is measured in agree in the same frame.
+class _TabsListScope extends InheritedWidget {
+  const _TabsListScope({required this.scrollable, required super.child});
+
+  final bool scrollable;
+
+  static bool scrollableOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<_TabsListScope>()
+          ?.scrollable ??
+      false;
+
+  @override
+  bool updateShouldNotify(_TabsListScope oldWidget) =>
+      scrollable != oldWidget.scrollable;
+}
+
+/// A tab set's column when its panels are in a strip. The strip fills a
+/// height the tab set is given and is as tall as its tallest panel when it
+/// is given none, which is a question only the incoming constraints answer.
+class _PagedColumn extends StatelessWidget {
+  const _PagedColumn({required this.children, required this.pager});
+
+  final List<Widget> children;
+  final Widget pager;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fill = constraints.hasBoundedHeight;
+        return Column(
+          mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ...children,
+            // Always a Flexible, so the strip keeps its state when the
+            // height it is offered comes and goes.
+            Flexible(flex: fill ? 1 : 0, fit: FlexFit.tight, child: pager),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A trigger's icon, label and badge, with the label coloured for its state.
+class _TriggerContent extends StatelessWidget {
+  const _TriggerContent({
+    required this.color,
+    required this.size,
+    required this.icon,
+    required this.badge,
+    required this.label,
+  });
+
+  final Color color;
+  final PanelTabsSize size;
+  final Widget? icon;
+  final Widget? badge;
+  final Widget label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    return IconTheme(
+      data: IconThemeData(color: theme.colors.mutedForeground, size: _iconSize),
+      child: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: color),
+        duration: panelReduceMotion(context)
+            ? Duration.zero
+            : _labelColorDuration,
+        curve: _webEase,
+        builder: (context, color, row) => DefaultTextStyle(
+          style: _labelStyle(theme.typography, size, color!),
+          textAlign: TextAlign.center,
+          child: row!,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: _contentGap,
+          children: [
+            ?icon,
+            Flexible(child: label),
+            ?badge,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The web package's hover fill behind a trigger: a muted plate inside an
+/// underline row, clear of its rule, and a muted pill behind an unselected
+/// pill. A segmented trigger has none.
+class _HoverFill extends StatelessWidget {
+  const _HoverFill({
+    required this.variant,
+    required this.active,
+    required this.hovered,
+    required this.shape,
+    required this.child,
+  });
+
+  final PanelTabsVariant variant;
+  final bool active;
+  final bool hovered;
+  final BorderRadius shape;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final muted = theme.colors.muted;
+    final clear = muted.withValues(alpha: 0);
+    final reduce = panelReduceMotion(context);
+    switch (variant) {
+      case PanelTabsVariant.underline:
+        return Stack(
+          // Passed through, so a trigger stretched past its label keeps its
+          // size and still centres it.
+          fit: StackFit.passthrough,
+          children: [
+            Positioned.fill(
+              child: Padding(
+                padding: _underlineHoverInset,
+                child: AnimatedContainer(
+                  duration: reduce ? Duration.zero : _underlineHoverDuration,
+                  curve: _webEase,
+                  decoration: BoxDecoration(
+                    color: hovered
+                        ? muted.withValues(
+                            alpha: muted.a * _underlineHoverAlpha,
+                          )
+                        : clear,
+                    borderRadius: BorderRadius.circular(theme.radii.md),
+                  ),
+                ),
+              ),
+            ),
+            child,
+          ],
+        );
+      case PanelTabsVariant.pill:
+        return AnimatedContainer(
+          duration: reduce ? Duration.zero : _labelColorDuration,
+          curve: _webEase,
+          decoration: BoxDecoration(
+            color: hovered && !active ? muted : clear,
+            borderRadius: shape,
+          ),
+          child: child,
+        );
+      case PanelTabsVariant.segmented:
+      case PanelTabsVariant.expanding:
+        return child;
+    }
+  }
+}
+
+/// A tab that is an icon until it is selected, and then an icon and its
+/// label.
+///
+/// The label is never removed, only closed over: a screen reader walking a
+/// row of icons still has something to read, and a label that is always
+/// there has a width to open from.
+class _ExpandingTrigger extends StatefulWidget {
+  const _ExpandingTrigger({
+    required this.active,
+    required this.enabled,
+    required this.icon,
+    required this.badge,
+    required this.size,
+    required this.animated,
+    required this.scrollable,
+    required this.labelColor,
+    required this.activeLabelColor,
+    required this.activeColor,
+    required this.semanticLabel,
+    required this.onPressed,
+    required this.child,
+  });
+
+  final bool active;
+  final bool enabled;
+  final Widget? icon;
+  final Widget? badge;
+  final PanelTabsSize size;
+  final bool animated;
+  final bool scrollable;
+  final Color? labelColor;
+  final Color? activeLabelColor;
+  final Color? activeColor;
+  final String? semanticLabel;
+  final VoidCallback onPressed;
+  final Widget child;
+
+  @override
+  State<_ExpandingTrigger> createState() => _ExpandingTriggerState();
+}
+
+class _ExpandingTriggerState extends State<_ExpandingTrigger>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _open = AnimationController(
+    vsync: this,
+    value: widget.active ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(_ExpandingTrigger oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active == widget.active) return;
+    final target = widget.active ? 1.0 : 0.0;
+    if (!widget.animated || panelReduceMotion(context)) {
+      _open.value = target;
+    } else {
+      _open.animateTo(target, duration: _expandDuration, curve: _expandCurve);
+    }
+  }
+
+  @override
+  void dispose() {
+    _open.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = PanelTheme.of(context);
+    final c = theme.colors;
+    final labelColor = widget.active
+        ? widget.activeLabelColor ?? c.foreground
+        : widget.labelColor ?? c.mutedForeground;
+
+    return PanelPressable(
+      onPressed: widget.enabled ? widget.onPressed : null,
+      pressScale: 1,
+      isButton: false,
+      semanticRole: SemanticsRole.tab,
+      selected: widget.active,
+      semanticLabel: widget.semanticLabel,
+      focusRingRadius: _roundedFull,
+      child: Opacity(
+        opacity: widget.enabled ? 1 : _disabledOpacity,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: _expandingPaddingX(
+              widget.size,
+              scrollable: widget.scrollable,
+            ),
+            vertical: _triggerPaddingY(PanelTabsVariant.expanding, widget.size),
+          ),
+          decoration: BoxDecoration(
+            color: widget.active
+                ? widget.activeColor ?? c.surfaceTertiary
+                : c.muted,
+            borderRadius: _roundedFull,
+          ),
+          child: IconTheme(
+            data: IconThemeData(color: c.mutedForeground, size: _iconSize),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ?widget.icon,
+                _LabelReveal(
+                  open: _open,
+                  child: DefaultTextStyle(
+                    style: _labelStyle(
+                      theme.typography,
+                      widget.size,
+                      labelColor,
+                    ),
+                    maxLines: 1,
+                    softWrap: false,
+                    child: widget.child,
+                  ),
+                ),
+                ?widget.badge,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An expanding tab's label, opened to [open] of its width.
+///
+/// The box opens to the label's own width, so the text never reflows on its
+/// way in or out.
+class _LabelReveal extends StatelessWidget {
+  const _LabelReveal({required this.open, required this.child});
+
+  final Animation<double> open;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: open,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(
+          start: _contentGap,
+          end: _labelSlack,
+        ),
+        child: child,
+      ),
+      builder: (context, label) {
+        final t = open.value;
+        return ClipRect(
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            widthFactor: t,
+            child: Opacity(
+              opacity: ((t - _revealFrom) / (_revealTo - _revealFrom)).clamp(
+                0.0,
+                1.0,
+              ),
+              // Read out while closed: a tab announced as an unlabelled icon
+              // is a tab nobody can choose.
+              alwaysIncludeSemantics: true,
+              child: label,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Where the indicator is drawn along the row.
+typedef _IndicatorSpan = ({double left, double width});
+
+/// Paints the indicator under the triggers, at the span the list hands it.
+class _IndicatorPainter extends CustomPainter {
+  _IndicatorPainter({
+    required this.span,
+    required Listenable repaint,
+    required this.underline,
+    required this.color,
+    required this.inset,
+    required this.cornerRadius,
+    required this.shadows,
+    required this.thickness,
+  }) : super(repaint: repaint);
+
+  final _IndicatorSpan? Function() span;
+  final bool underline;
+  final Color color;
+
+  /// How far the chip stays from the row's top and bottom edges: the track's
+  /// padding in `segmented`.
+  final double inset;
+
+  /// Null rounds the ends fully.
+  final double? cornerRadius;
+  final List<BoxShadow> shadows;
+  final double thickness;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final span = this.span();
+    if (span == null) return;
+    final rect = underline
+        // The rule's bottom edge is the bottom of the list's 1pt hairline
+        // under this row (`-bottom-px`), so it sits on the line.
+        ? Rect.fromLTWH(
+            span.left,
+            size.height + 1 - thickness,
+            span.width,
+            thickness,
+          )
+        : Rect.fromLTRB(
+            span.left,
+            inset,
+            span.left + span.width,
+            size.height - inset,
+          );
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      Radius.circular(cornerRadius ?? rect.shortestSide / 2),
+    );
+    for (final shadow in shadows) {
+      canvas.drawRRect(
+        rrect.shift(shadow.offset).inflate(shadow.spreadRadius),
+        shadow.toPaint(),
+      );
+    }
+    canvas.drawRRect(rrect, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_IndicatorPainter oldDelegate) =>
+      oldDelegate.span != span ||
+      oldDelegate.underline != underline ||
+      oldDelegate.color != color ||
+      oldDelegate.inset != inset ||
+      oldDelegate.cornerRadius != cornerRadius ||
+      !listEquals(oldDelegate.shadows, shadows) ||
+      oldDelegate.thickness != thickness;
+}
+
+/// Where the row last laid its triggers out, shared between the row's render
+/// object (which writes it) and the list (which reads it).
+class _TabsRowGeometry {
+  List<Rect> rects = const [];
+  Size size = Size.zero;
+  VoidCallback? onLayout;
+}
+
+class _TabsRowParentData extends ContainerBoxParentData<RenderBox> {}
+
+/// A row of triggers inside [padding]: equal shares of a bounded width when
+/// [fit], natural widths otherwise, every trigger as tall as the tallest. It
+/// records where each trigger landed for the indicator.
+///
+/// The padding is the row's own rather than a wrapper's, so a trigger's hit
+/// slop reaches into it, as it reaches into PanelUI's padded list.
+class _TabsRow extends MultiChildRenderObjectWidget {
+  const _TabsRow({
+    required this.fit,
+    required this.gap,
+    required this.padding,
+    required this.alignment,
+    required this.geometry,
+    required super.children,
+  });
+
+  final bool fit;
+  final double gap;
+  final EdgeInsets padding;
+  final MainAxisAlignment alignment;
+  final _TabsRowGeometry geometry;
+
+  @override
+  _RenderTabsRow createRenderObject(BuildContext context) => _RenderTabsRow(
+    fit: fit,
+    gap: gap,
+    padding: padding,
+    alignment: alignment,
+    geometry: geometry,
+    textDirection: Directionality.of(context),
+  );
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderTabsRow renderObject) {
+    renderObject
+      ..fit = fit
+      ..gap = gap
+      ..padding = padding
+      ..alignment = alignment
+      ..geometry = geometry
+      ..textDirection = Directionality.of(context);
+  }
+}
+
+class _RenderTabsRow extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _TabsRowParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _TabsRowParentData> {
+  _RenderTabsRow({
+    required bool fit,
+    required double gap,
+    required EdgeInsets padding,
+    required MainAxisAlignment alignment,
+    required _TabsRowGeometry geometry,
+    required TextDirection textDirection,
+  }) : _fit = fit,
+       _gap = gap,
+       _padding = padding,
+       _alignment = alignment,
+       _geometry = geometry,
+       _textDirection = textDirection;
+
+  bool get fit => _fit;
+  bool _fit;
+  set fit(bool value) {
+    if (value == _fit) return;
+    _fit = value;
+    markNeedsLayout();
+  }
+
+  double get gap => _gap;
+  double _gap;
+  set gap(double value) {
+    if (value == _gap) return;
+    _gap = value;
+    markNeedsLayout();
+  }
+
+  EdgeInsets get padding => _padding;
+  EdgeInsets _padding;
+  set padding(EdgeInsets value) {
+    if (value == _padding) return;
+    _padding = value;
+    markNeedsLayout();
+  }
+
+  MainAxisAlignment get alignment => _alignment;
+  MainAxisAlignment _alignment;
+  set alignment(MainAxisAlignment value) {
+    if (value == _alignment) return;
+    _alignment = value;
+    markNeedsLayout();
+  }
+
+  _TabsRowGeometry get geometry => _geometry;
+  _TabsRowGeometry _geometry;
+  set geometry(_TabsRowGeometry value) {
+    if (identical(value, _geometry)) return;
+    _geometry = value;
+    markNeedsLayout();
+  }
+
+  TextDirection get textDirection => _textDirection;
+  TextDirection _textDirection;
+  set textDirection(TextDirection value) {
+    if (value == _textDirection) return;
+    _textDirection = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void setupParentData(RenderBox child) {
+    if (child.parentData is! _TabsRowParentData) {
+      child.parentData = _TabsRowParentData();
+    }
+  }
+
+  /// The share each trigger gets of [width] in a fixed row, or null when the
+  /// triggers keep their natural widths.
+  double? _shareOf(double width, int count) {
+    if (!fit || !width.isFinite) return null;
+    final inner = width - padding.horizontal - gap * (count - 1);
+    return math.max(0.0, inner / count);
+  }
+
+  double _intrinsicWidth(double Function(RenderBox child) measure) {
+    final children = getChildrenAsList();
+    if (children.isEmpty) return padding.horizontal;
+    final widths = children.map(measure);
+    final content = fit
+        ? widths.reduce(math.max) * children.length
+        : widths.reduce((a, b) => a + b);
+    return content + gap * (children.length - 1) + padding.horizontal;
+  }
+
+  double _intrinsicHeight(
+    double width,
+    double Function(RenderBox child, double width) measure,
+  ) {
+    final children = getChildrenAsList();
+    final share = _shareOf(width, children.length) ?? double.infinity;
+    var tallest = 0.0;
+    for (final child in children) {
+      tallest = math.max(tallest, measure(child, share));
+    }
+    return tallest + padding.vertical;
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) =>
+      _intrinsicWidth((child) => child.getMinIntrinsicWidth(double.infinity));
+
+  @override
+  double computeMaxIntrinsicWidth(double height) =>
+      _intrinsicWidth((child) => child.getMaxIntrinsicWidth(double.infinity));
+
+  @override
+  double computeMinIntrinsicHeight(double width) =>
+      _intrinsicHeight(width, (child, w) => child.getMinIntrinsicHeight(w));
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _intrinsicHeight(width, (child, w) => child.getMaxIntrinsicHeight(w));
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
+      defaultComputeDistanceToHighestActualBaseline(baseline);
+
+  /// Lays the triggers out (or, with [dry], only measures them) and works
+  /// out where each one goes.
+  ({Size size, List<Rect> rects}) _layout(
+    BoxConstraints constraints, {
+    required bool dry,
+  }) {
+    final children = getChildrenAsList();
+    final count = children.length;
+    if (count == 0) {
+      return (
+        size: constraints.constrain(Size(padding.horizontal, padding.vertical)),
+        rects: const <Rect>[],
+      );
+    }
+    final share = _shareOf(constraints.maxWidth, count);
+    final natural = share == null
+        ? const BoxConstraints()
+        : BoxConstraints.tightFor(width: share);
+    final sizes = [
+      for (final child in children)
+        dry
+            ? child.getDryLayout(natural)
+            : (child..layout(natural, parentUsesSize: true)).size,
+    ];
+    final tallest = sizes.fold(
+      0.0,
+      (most, size) => math.max(most, size.height),
+    );
+    final height = math.max(
+      0.0,
+      constraints.constrainHeight(tallest + padding.vertical) -
+          padding.vertical,
+    );
+
+    // Every trigger as tall as the row, as a flex row stretches them. Only
+    // the shorter ones are laid out again, with a minimum rather than a
+    // tight height: a trigger laid out tight becomes a relayout boundary,
+    // and one that then changes its own size (an expanding label opening)
+    // would never tell the row.
+    if (!dry) {
+      for (var i = 0; i < count; i++) {
+        if (sizes[i].height >= height) continue;
+        children[i].layout(
+          BoxConstraints(
+            minWidth: sizes[i].width,
+            maxWidth: share ?? double.infinity,
+            minHeight: height,
+          ),
+          parentUsesSize: true,
+        );
+      }
+    }
+
+    final widths = [for (final size in sizes) share ?? size.width];
+    final content =
+        widths.reduce((a, b) => a + b) + gap * (count - 1) + padding.horizontal;
+    final size = constraints.constrain(
+      Size(content, height + padding.vertical),
+    );
+    final free = math.max(0.0, size.width - content);
+    var lead = 0.0;
+    var between = gap;
+    switch (alignment) {
+      case MainAxisAlignment.start:
+        break;
+      case MainAxisAlignment.end:
+        lead = free;
+      case MainAxisAlignment.center:
+        lead = free / 2;
+      case MainAxisAlignment.spaceBetween:
+        if (count > 1) between += free / (count - 1);
+      case MainAxisAlignment.spaceAround:
+        lead = free / count / 2;
+        between += free / count;
+      case MainAxisAlignment.spaceEvenly:
+        lead = free / (count + 1);
+        between += free / (count + 1);
+    }
+
+    final rtl = textDirection == TextDirection.rtl;
+    final rects = <Rect>[];
+    var x = padding.left + lead;
+    for (final width in widths) {
+      final left = rtl ? size.width - x - width : x;
+      rects.add(Rect.fromLTWH(left, padding.top, width, height));
+      x += width + between;
+    }
+    return (size: size, rects: rects);
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) =>
+      _layout(constraints, dry: true).size;
+
+  @override
+  void performLayout() {
+    final result = _layout(constraints, dry: false);
+    size = result.size;
+    var index = 0;
+    var child = firstChild;
+    while (child != null) {
+      (child.parentData! as _TabsRowParentData).offset =
+          result.rects[index].topLeft;
+      index++;
+      child = childAfter(child);
+    }
+    geometry
+      ..rects = result.rects
+      ..size = size;
+    geometry.onLayout?.call();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
 }
 
 /// The panels side by side, behind a window one panel wide.
@@ -1227,6 +1713,8 @@ class _TabsPagerState extends State<_TabsPager>
   bool _neighboursScheduled = false;
 
   bool get _still => !widget.animated || panelReduceMotion(context);
+
+  double get _sign => _rtl ? -1 : 1;
 
   /// The selected panel, or the last one that resolved: a value missing for
   /// a moment (a controlled parent part-way through an update) holds the
@@ -1295,8 +1783,6 @@ class _TabsPagerState extends State<_TabsPager>
     });
   }
 
-  double get _sign => _rtl ? -1 : 1;
-
   void _handleDragStart(DragStartDetails details) {
     // Rounded, so a drag begun while the last one is still settling starts
     // from the tab it is settling on.
@@ -1308,7 +1794,7 @@ class _TabsPagerState extends State<_TabsPager>
 
   void _handleDragUpdate(DragUpdateDetails details) {
     if (!_dragging || _width == 0) return;
-    _travel += details.primaryDelta ?? details.delta.dx;
+    _travel += details.delta.dx;
     final last = widget.panels.length - 1;
     final raw = _start - (_travel * _sign) / _width;
     // Past either end there is no panel to bring on, so the strip gives a
@@ -1372,12 +1858,19 @@ class _TabsPagerState extends State<_TabsPager>
   @override
   Widget build(BuildContext context) {
     _rtl = Directionality.of(context) == TextDirection.rtl;
-    return GestureDetector(
+    return RawGestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragStart: _handleDragStart,
-      onHorizontalDragUpdate: _handleDragUpdate,
-      onHorizontalDragEnd: _handleDragEnd,
-      onHorizontalDragCancel: _handleDragCancel,
+      gestures: {
+        _StripDragRecognizer:
+            GestureRecognizerFactoryWithHandlers<_StripDragRecognizer>(
+              () => _StripDragRecognizer(debugOwner: this),
+              (recognizer) => recognizer
+                ..onStart = _handleDragStart
+                ..onUpdate = _handleDragUpdate
+                ..onEnd = _handleDragEnd
+                ..onCancel = _handleDragCancel,
+            ),
+      },
       child: _PagerStrip(
         position: _position,
         onWidth: (width) => _width = width,
@@ -1386,14 +1879,83 @@ class _TabsPagerState extends State<_TabsPager>
             _PagerSlot(
               key: ValueKey<Object?>(widget.panels[i].value),
               active: i == _active,
-              child: _reached.contains(i)
-                  ? widget.panels[i]
-                  : const SizedBox.shrink(),
+              // Each panel its own layer, so moving the strip moves layers
+              // rather than repainting what is on them.
+              child: RepaintBoundary(
+                child: _reached.contains(i)
+                    ? widget.panels[i]
+                    : const SizedBox.shrink(),
+              ),
             ),
         ],
       ),
     );
   }
+}
+
+/// A sideways drag on the strip, with PanelUI's activation window: it takes
+/// the gesture once the finger has travelled [_swipeActivateX] sideways, and
+/// gives it up if the finger travels [_swipeFailY] up or down first, so a
+/// vertical scroll in or around a panel keeps its drags.
+class _StripDragRecognizer extends HorizontalDragGestureRecognizer {
+  _StripDragRecognizer({super.debugOwner}) {
+    // Even with nothing else wanting the pointer, the drag starts only past
+    // the threshold, so a vertical drag can still give it up.
+    onlyAcceptDragOnThreshold = true;
+    // Reported from touch-down, so the strip catches up with the finger the
+    // moment it takes the drag, as PanelUI's translation does.
+    dragStartBehavior = DragStartBehavior.down;
+  }
+
+  final Map<int, double> _downY = {};
+  bool _activated = false;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    _downY[event.pointer] = event.position.dy;
+  }
+
+  @override
+  bool hasSufficientGlobalDistanceToAccept(
+    PointerDeviceKind pointerDeviceKind,
+    double? deviceTouchSlop,
+  ) {
+    if (globalDistanceMoved.abs() > _swipeActivateX) _activated = true;
+    return _activated;
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    final downY = _downY[event.pointer];
+    if (!_activated &&
+        event is PointerMoveEvent &&
+        downY != null &&
+        (event.position.dy - downY).abs() > _swipeFailY) {
+      // Gives the pointer up the way the arena would.
+      rejectGesture(event.pointer);
+      return;
+    }
+    super.handleEvent(event);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    _activated = false;
+    _downY.clear();
+    super.didStopTrackingLastPointer(pointer);
+  }
+}
+
+/// Marks a panel as sitting in a swipeable strip, and whether it is the one
+/// in view.
+class _PagerSlot extends InheritedWidget {
+  const _PagerSlot({super.key, required this.active, required super.child});
+
+  final bool active;
+
+  @override
+  bool updateShouldNotify(_PagerSlot oldWidget) => active != oldWidget.active;
 }
 
 class _StripParentData extends ContainerBoxParentData<RenderBox> {}
@@ -1464,6 +2026,11 @@ class _RenderPagerStrip extends RenderBox
 
   final LayerHandle<ClipRectLayer> _clip = LayerHandle<ClipRectLayer>();
 
+  /// The strip moves on every frame of a swipe; as its own repaint boundary
+  /// that repaints nothing around it.
+  @override
+  bool get isRepaintBoundary => true;
+
   void _moved() {
     markNeedsPaint();
     markNeedsSemanticsUpdate();
@@ -1514,35 +2081,44 @@ class _RenderPagerStrip extends RenderBox
 
   Size _layout(BoxConstraints constraints, {required bool dry}) {
     final width = _windowWidth(constraints);
-    var height = constraints.minHeight;
+    final children = getChildrenAsList();
     if (constraints.hasTightHeight) {
-      height = constraints.maxHeight;
-    } else {
-      final loose = BoxConstraints(
-        minWidth: width,
-        maxWidth: width,
-        maxHeight: constraints.maxHeight,
+      final tight = BoxConstraints.tightFor(
+        width: width,
+        height: constraints.maxHeight,
       );
-      var child = firstChild;
-      while (child != null) {
-        final measured = dry
-            ? child.getDryLayout(loose)
-            : (child..layout(loose, parentUsesSize: true)).size;
-        height = math.max(height, measured.height);
-        child = childAfter(child);
+      if (!dry) {
+        for (final child in children) {
+          child.layout(tight);
+        }
       }
-      height = constraints.constrainHeight(height);
+      return constraints.constrain(Size(width, constraints.maxHeight));
     }
+
+    final natural = BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: constraints.maxHeight,
+    );
+    final heights = [
+      for (final child in children)
+        dry
+            ? child.getDryLayout(natural).height
+            : (child..layout(natural, parentUsesSize: true)).size.height,
+    ];
+    final height = constraints.constrainHeight(
+      heights.fold(constraints.minHeight, math.max),
+    );
+    // The shorter panels are stretched to the tallest with a minimum rather
+    // than a tight height, so a panel whose content grows still makes the
+    // strip grow with it.
     if (!dry) {
-      // Stretched to the tallest with a minimum, not a tight height, so a
-      // panel whose content grows still makes the strip grow with it.
-      final stretched = constraints.hasTightHeight
-          ? BoxConstraints.tightFor(width: width, height: height)
-          : BoxConstraints(minWidth: width, maxWidth: width, minHeight: height);
-      var child = firstChild;
-      while (child != null) {
-        child.layout(stretched, parentUsesSize: !constraints.hasTightHeight);
-        child = childAfter(child);
+      for (var i = 0; i < children.length; i++) {
+        if (heights[i] >= height) continue;
+        children[i].layout(
+          BoxConstraints(minWidth: width, maxWidth: width, minHeight: height),
+          parentUsesSize: true,
+        );
       }
     }
     return constraints.constrain(Size(width, height));
@@ -1558,27 +2134,16 @@ class _RenderPagerStrip extends RenderBox
     size = _layout(constraints, dry: false);
   }
 
-  @override
-  double computeMinIntrinsicHeight(double width) {
-    var height = 0.0;
-    var child = firstChild;
-    while (child != null) {
-      height = math.max(height, child.getMinIntrinsicHeight(width));
-      child = childAfter(child);
-    }
-    return height;
-  }
+  double _tallestIntrinsic(double Function(RenderBox child) measure) =>
+      getChildrenAsList().map(measure).fold(0.0, math.max);
 
   @override
-  double computeMaxIntrinsicHeight(double width) {
-    var height = 0.0;
-    var child = firstChild;
-    while (child != null) {
-      height = math.max(height, child.getMaxIntrinsicHeight(width));
-      child = childAfter(child);
-    }
-    return height;
-  }
+  double computeMinIntrinsicHeight(double width) =>
+      _tallestIntrinsic((child) => child.getMinIntrinsicHeight(width));
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      _tallestIntrinsic((child) => child.getMaxIntrinsicHeight(width));
 
   @override
   double computeMinIntrinsicWidth(double height) => 0;
@@ -1636,318 +2201,4 @@ class _RenderPagerStrip extends RenderBox
 
   @override
   Rect? describeApproximatePaintClip(RenderObject child) => Offset.zero & size;
-}
-
-/// Where the row last laid its triggers out, shared between the row's render
-/// object (which writes it) and the list (which reads it).
-class _TabsRowGeometry {
-  List<Rect> rects = const [];
-  Size size = Size.zero;
-  VoidCallback? onLayout;
-}
-
-class _TabsRowParentData extends ContainerBoxParentData<RenderBox> {}
-
-/// A row of triggers: equal shares of a bounded width when [fit], natural
-/// widths plus [extraWidth] otherwise, every trigger as tall as the tallest.
-/// It records where each trigger landed for the indicator.
-class _TabsRow extends MultiChildRenderObjectWidget {
-  const _TabsRow({
-    required this.fit,
-    required this.gap,
-    required this.extraWidth,
-    required this.alignment,
-    required this.geometry,
-    required super.children,
-  });
-
-  final bool fit;
-  final double gap;
-  final double extraWidth;
-  final MainAxisAlignment alignment;
-  final _TabsRowGeometry geometry;
-
-  @override
-  _RenderTabsRow createRenderObject(BuildContext context) => _RenderTabsRow(
-    fit: fit,
-    gap: gap,
-    extraWidth: extraWidth,
-    alignment: alignment,
-    geometry: geometry,
-    textDirection: Directionality.of(context),
-  );
-
-  @override
-  void updateRenderObject(BuildContext context, _RenderTabsRow renderObject) {
-    renderObject
-      ..fit = fit
-      ..gap = gap
-      ..extraWidth = extraWidth
-      ..alignment = alignment
-      ..geometry = geometry
-      ..textDirection = Directionality.of(context);
-  }
-}
-
-class _RenderTabsRow extends RenderBox
-    with
-        ContainerRenderObjectMixin<RenderBox, _TabsRowParentData>,
-        RenderBoxContainerDefaultsMixin<RenderBox, _TabsRowParentData> {
-  _RenderTabsRow({
-    required bool fit,
-    required double gap,
-    required double extraWidth,
-    required MainAxisAlignment alignment,
-    required _TabsRowGeometry geometry,
-    required TextDirection textDirection,
-  }) : _fit = fit,
-       _gap = gap,
-       _extraWidth = extraWidth,
-       _alignment = alignment,
-       _geometry = geometry,
-       _textDirection = textDirection;
-
-  bool get fit => _fit;
-  bool _fit;
-  set fit(bool value) {
-    if (value == _fit) return;
-    _fit = value;
-    markNeedsLayout();
-  }
-
-  double get gap => _gap;
-  double _gap;
-  set gap(double value) {
-    if (value == _gap) return;
-    _gap = value;
-    markNeedsLayout();
-  }
-
-  double get extraWidth => _extraWidth;
-  double _extraWidth;
-  set extraWidth(double value) {
-    if (value == _extraWidth) return;
-    _extraWidth = value;
-    markNeedsLayout();
-  }
-
-  MainAxisAlignment get alignment => _alignment;
-  MainAxisAlignment _alignment;
-  set alignment(MainAxisAlignment value) {
-    if (value == _alignment) return;
-    _alignment = value;
-    markNeedsLayout();
-  }
-
-  _TabsRowGeometry get geometry => _geometry;
-  _TabsRowGeometry _geometry;
-  set geometry(_TabsRowGeometry value) {
-    if (identical(value, _geometry)) return;
-    _geometry = value;
-    markNeedsLayout();
-  }
-
-  TextDirection get textDirection => _textDirection;
-  TextDirection _textDirection;
-  set textDirection(TextDirection value) {
-    if (value == _textDirection) return;
-    _textDirection = value;
-    markNeedsLayout();
-  }
-
-  @override
-  void setupParentData(RenderBox child) {
-    if (child.parentData is! _TabsRowParentData) {
-      child.parentData = _TabsRowParentData();
-    }
-  }
-
-  List<RenderBox> get _children {
-    final children = <RenderBox>[];
-    var child = firstChild;
-    while (child != null) {
-      children.add(child);
-      child = childAfter(child);
-    }
-    return children;
-  }
-
-  double _intrinsicWidth(double Function(RenderBox child) measure) {
-    final children = _children;
-    if (children.isEmpty) return 0;
-    final gaps = gap * (children.length - 1);
-    if (fit) {
-      var widest = 0.0;
-      for (final child in children) {
-        widest = math.max(widest, measure(child));
-      }
-      return widest * children.length + gaps;
-    }
-    var total = gaps;
-    for (final child in children) {
-      total += measure(child) + extraWidth;
-    }
-    return total;
-  }
-
-  double _intrinsicHeight(
-    double width,
-    double Function(RenderBox child, double width) measure,
-  ) {
-    final children = _children;
-    if (children.isEmpty) return 0;
-    var share = double.infinity;
-    if (fit && width.isFinite) {
-      share = math.max(
-        0.0,
-        (width - gap * (children.length - 1)) / children.length,
-      );
-    }
-    var tallest = 0.0;
-    for (final child in children) {
-      tallest = math.max(tallest, measure(child, share));
-    }
-    return tallest;
-  }
-
-  @override
-  double computeMinIntrinsicWidth(double height) =>
-      _intrinsicWidth((child) => child.getMinIntrinsicWidth(double.infinity));
-
-  @override
-  double computeMaxIntrinsicWidth(double height) =>
-      _intrinsicWidth((child) => child.getMaxIntrinsicWidth(double.infinity));
-
-  @override
-  double computeMinIntrinsicHeight(double width) =>
-      _intrinsicHeight(width, (child, w) => child.getMinIntrinsicHeight(w));
-
-  @override
-  double computeMaxIntrinsicHeight(double width) =>
-      _intrinsicHeight(width, (child, w) => child.getMaxIntrinsicHeight(w));
-
-  @override
-  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
-      defaultComputeDistanceToHighestActualBaseline(baseline);
-
-  ({Size size, List<Rect> rects}) _layout(
-    BoxConstraints constraints, {
-    required bool dry,
-  }) {
-    final children = _children;
-    if (children.isEmpty) {
-      return (size: constraints.smallest, rects: const <Rect>[]);
-    }
-    final count = children.length;
-    final gaps = gap * (count - 1);
-    final widths = List<double>.filled(count, 0);
-    var tallest = 0.0;
-
-    Size measure(RenderBox child, BoxConstraints childConstraints) {
-      if (dry) return child.getDryLayout(childConstraints);
-      child.layout(childConstraints, parentUsesSize: true);
-      return child.size;
-    }
-
-    if (fit && constraints.hasBoundedWidth) {
-      final share = math.max(0.0, (constraints.maxWidth - gaps) / count);
-      for (var i = 0; i < count; i++) {
-        final measured = measure(
-          children[i],
-          BoxConstraints.tightFor(width: share),
-        );
-        widths[i] = share;
-        tallest = math.max(tallest, measured.height);
-      }
-    } else {
-      for (var i = 0; i < count; i++) {
-        final measured = measure(children[i], const BoxConstraints());
-        widths[i] = measured.width + extraWidth;
-        tallest = math.max(tallest, measured.height);
-      }
-    }
-
-    // Every trigger as tall as the tallest, as a flex row stretches them.
-    //
-    // A minimum rather than a tight size, and with the size used: a trigger
-    // laid out tight becomes a relayout boundary, and one that then changes
-    // its own size (an expanding label opening) would never tell the row.
-    final height = constraints.constrainHeight(tallest);
-    if (!dry) {
-      for (var i = 0; i < count; i++) {
-        children[i].layout(
-          BoxConstraints(
-            minWidth: widths[i],
-            maxWidth: fit && constraints.hasBoundedWidth
-                ? widths[i]
-                : double.infinity,
-            minHeight: height,
-          ),
-          parentUsesSize: true,
-        );
-      }
-    }
-
-    final content = widths.fold<double>(gaps, (sum, w) => sum + w);
-    final width = constraints.constrainWidth(content);
-    final free = math.max(0.0, width - content);
-    var lead = 0.0;
-    var between = gap;
-    switch (alignment) {
-      case MainAxisAlignment.start:
-        break;
-      case MainAxisAlignment.end:
-        lead = free;
-      case MainAxisAlignment.center:
-        lead = free / 2;
-      case MainAxisAlignment.spaceBetween:
-        if (count > 1) between += free / (count - 1);
-      case MainAxisAlignment.spaceAround:
-        lead = free / count / 2;
-        between += free / count;
-      case MainAxisAlignment.spaceEvenly:
-        lead = free / (count + 1);
-        between += free / (count + 1);
-    }
-
-    final rtl = textDirection == TextDirection.rtl;
-    final rects = <Rect>[];
-    var x = lead;
-    for (var i = 0; i < count; i++) {
-      final w = widths[i];
-      rects.add(Rect.fromLTWH(rtl ? width - x - w : x, 0, w, height));
-      x += w + between;
-    }
-    return (size: Size(width, height), rects: rects);
-  }
-
-  @override
-  Size computeDryLayout(BoxConstraints constraints) =>
-      _layout(constraints, dry: true).size;
-
-  @override
-  void performLayout() {
-    final result = _layout(constraints, dry: false);
-    size = result.size;
-    var index = 0;
-    var child = firstChild;
-    while (child != null) {
-      (child.parentData! as _TabsRowParentData).offset =
-          result.rects[index].topLeft;
-      index++;
-      child = childAfter(child);
-    }
-    geometry
-      ..rects = result.rects
-      ..size = size;
-    geometry.onLayout?.call();
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) =>
-      defaultPaint(context, offset);
-
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
-      defaultHitTestChildren(result, position: position);
 }

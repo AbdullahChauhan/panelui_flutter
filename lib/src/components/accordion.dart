@@ -8,11 +8,6 @@ import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_typography.dart';
 
-/// How long a section takes to open or close, and its chevron to turn. One
-/// duration for both, so the panel and the arrow that describes it finish
-/// together.
-const Duration _disclosureDuration = Duration(milliseconds: 200);
-
 /// How a [PanelAccordion] is drawn.
 enum PanelAccordionVariant {
   /// Sections on the page, divided by hairlines. PanelUI's `default`.
@@ -38,6 +33,18 @@ enum PanelAccordionSelectionMode {
 
   /// Any number of sections can be open at once.
   multiple,
+}
+
+/// How a [PanelCollapsible] is drawn.
+enum PanelCollapsibleVariant {
+  /// On the page, with a small inset. PanelUI's `default`.
+  plain,
+
+  /// Inside a bordered, rounded surface.
+  surface,
+
+  /// No inset: the text lines up with the content around it.
+  ghost,
 }
 
 /// Collapsible sections, each a header that shows and hides its body.
@@ -153,7 +160,7 @@ class _PanelAccordionState<T> extends State<PanelAccordion<T>> {
             child: Container(
               height: 1,
               margin: variant == PanelAccordionVariant.surface
-                  ? const EdgeInsets.symmetric(horizontal: 16)
+                  ? const EdgeInsets.symmetric(horizontal: _boxedInset)
                   : null,
               color: c.border,
             ),
@@ -165,7 +172,7 @@ class _PanelAccordionState<T> extends State<PanelAccordion<T>> {
     Widget column = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: variant == PanelAccordionVariant.separated ? 10 : 0,
+      spacing: variant == PanelAccordionVariant.separated ? _separatedGap : 0,
       children: items,
     );
     if (variant == PanelAccordionVariant.surface) {
@@ -187,38 +194,6 @@ class _PanelAccordionState<T> extends State<PanelAccordion<T>> {
       child: column,
     );
   }
-}
-
-class _AccordionScope extends InheritedWidget {
-  const _AccordionScope({
-    required this.expanded,
-    required this.toggle,
-    required this.variant,
-    required this.keepMounted,
-    required super.child,
-  });
-
-  final Set<Object?> expanded;
-  final ValueChanged<Object?> toggle;
-  final PanelAccordionVariant variant;
-  final bool keepMounted;
-
-  static _AccordionScope of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<_AccordionScope>();
-    if (scope == null) {
-      throw FlutterError(
-        'PanelAccordionItem must be used inside a PanelAccordion.',
-      );
-    }
-    return scope;
-  }
-
-  @override
-  bool updateShouldNotify(_AccordionScope oldWidget) =>
-      !setEquals(expanded, oldWidget.expanded) ||
-      toggle != oldWidget.toggle ||
-      variant != oldWidget.variant ||
-      keepMounted != oldWidget.keepMounted;
 }
 
 /// One section of a [PanelAccordion]: a header that toggles it and the body
@@ -273,7 +248,13 @@ class PanelAccordionItem<T> extends StatelessWidget {
     final c = theme.colors;
     final open = scope.expanded.contains(value);
     final variant = scope.variant;
-    final inset = _inset(variant);
+    final inset = switch (variant) {
+      PanelAccordionVariant.plain => _plainInset,
+      PanelAccordionVariant.ghost => 0.0,
+      PanelAccordionVariant.surface ||
+      PanelAccordionVariant.separated ||
+      PanelAccordionVariant.bordered => _boxedInset,
+    };
     final reduce = panelReduceMotion(context);
     final keep = keepMounted ?? scope.keepMounted;
 
@@ -322,7 +303,7 @@ class PanelAccordionItem<T> extends StatelessWidget {
         );
       case PanelAccordionVariant.bordered:
         section = Container(
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: const EdgeInsets.only(bottom: _borderedGap),
           decoration: BoxDecoration(
             border: Border.all(color: c.border),
             borderRadius: BorderRadius.circular(theme.radii.xl),
@@ -336,31 +317,6 @@ class PanelAccordionItem<T> extends StatelessWidget {
     }
     return section;
   }
-
-  static double _inset(PanelAccordionVariant variant) {
-    switch (variant) {
-      case PanelAccordionVariant.plain:
-        return 4;
-      case PanelAccordionVariant.ghost:
-        return 0;
-      case PanelAccordionVariant.surface:
-      case PanelAccordionVariant.separated:
-      case PanelAccordionVariant.bordered:
-        return 16;
-    }
-  }
-}
-
-/// How a [PanelCollapsible] is drawn.
-enum PanelCollapsibleVariant {
-  /// On the page, with a small inset. PanelUI's `default`.
-  plain,
-
-  /// Inside a bordered, rounded surface.
-  surface,
-
-  /// No inset: the text lines up with the content around it.
-  ghost,
 }
 
 /// One section whose header shows and hides its body.
@@ -487,11 +443,11 @@ class _PanelCollapsibleState extends State<PanelCollapsible>
     final theme = PanelTheme.of(context);
     final c = theme.colors;
     final open = _open;
-    final inset = widget.variant == PanelCollapsibleVariant.plain
-        ? 4.0
-        : widget.variant == PanelCollapsibleVariant.ghost
-        ? 0.0
-        : 16.0;
+    final inset = switch (widget.variant) {
+      PanelCollapsibleVariant.plain => _plainInset,
+      PanelCollapsibleVariant.surface => _boxedInset,
+      PanelCollapsibleVariant.ghost => 0.0,
+    };
 
     final body = AnimatedBuilder(
       animation: _progress,
@@ -503,8 +459,11 @@ class _PanelCollapsibleState extends State<PanelCollapsible>
         ),
       ),
       builder: (context, child) {
-        final t = _progress.value.clamp(0.0, 1.0);
+        final t = _progress.value;
         return ClipRect(
+          // Cut only while the height is: once open, the body draws as it
+          // would anywhere else, and a focus ring at its edge is not lost.
+          clipBehavior: t < 1 ? Clip.hardEdge : Clip.none,
           child: Align(
             alignment: AlignmentDirectional.topStart,
             heightFactor: t,
@@ -551,6 +510,63 @@ class _PanelCollapsibleState extends State<PanelCollapsible>
   }
 }
 
+/// How long a section takes to open or close, and its chevron to turn. One
+/// duration for both, so the panel and the arrow that describes it finish
+/// together.
+const Duration _disclosureDuration = Duration(milliseconds: 200);
+
+/// How far a header and its body sit in from the section's edges: `px-1` in
+/// the plain variant, `px-4` inside a box.
+const double _plainInset = 4;
+const double _boxedInset = 16;
+
+/// A header's vertical padding (`py-4`), the gap between its title and its
+/// chevron (`gap-4`), and the chevron's size: PanelUI draws it at 18pt, in
+/// the muted grey its icons default to.
+const double _triggerPaddingY = 16;
+const double _triggerGap = 16;
+const double _chevronSize = 18;
+
+/// The room under a body (`pb-4`).
+const double _bodyPaddingBottom = 16;
+
+/// The gap between separated sections (`gap-2.5`), and the margin under each
+/// bordered one (`mb-2`).
+const double _separatedGap = 10;
+const double _borderedGap = 8;
+
+class _AccordionScope extends InheritedWidget {
+  const _AccordionScope({
+    required this.expanded,
+    required this.toggle,
+    required this.variant,
+    required this.keepMounted,
+    required super.child,
+  });
+
+  final Set<Object?> expanded;
+  final ValueChanged<Object?> toggle;
+  final PanelAccordionVariant variant;
+  final bool keepMounted;
+
+  static _AccordionScope of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_AccordionScope>();
+    if (scope == null) {
+      throw FlutterError(
+        'PanelAccordionItem must be used inside a PanelAccordion.',
+      );
+    }
+    return scope;
+  }
+
+  @override
+  bool updateShouldNotify(_AccordionScope oldWidget) =>
+      !setEquals(expanded, oldWidget.expanded) ||
+      toggle != oldWidget.toggle ||
+      variant != oldWidget.variant ||
+      keepMounted != oldWidget.keepMounted;
+}
+
 /// The pressable header row shared by accordion sections and collapsibles:
 /// a title that takes the width and a chevron that turns half a circle while
 /// the section is open.
@@ -584,40 +600,43 @@ class _DisclosureTrigger extends StatelessWidget {
     return PanelPressable(
       onPressed: enabled ? onPressed : null,
       pressScale: 1,
+      expanded: open,
       semanticLabel: semanticLabel,
       focusRingRadius: BorderRadius.circular(theme.radii.lg),
-      child: Semantics(
-        expanded: open,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: inset, vertical: 16),
-          child: Row(
-            spacing: 16,
-            children: [
-              Expanded(
-                child: DefaultTextStyle(
-                  style: theme.typography.style(
-                    PanelTextSize.base,
-                    weight: FontWeight.w500,
-                    color: c.foreground,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: inset,
+          vertical: _triggerPaddingY,
+        ),
+        child: Row(
+          spacing: _triggerGap,
+          children: [
+            Expanded(
+              child: DefaultTextStyle(
+                style: theme.typography.style(
+                  PanelTextSize.base,
+                  weight: FontWeight.w500,
+                  color: c.foreground,
+                ),
+                child: title,
+              ),
+            ),
+            if (showIndicator)
+              ExcludeSemantics(
+                child: AnimatedRotation(
+                  turns: open ? 0.5 : 0,
+                  duration: reduce ? Duration.zero : _disclosureDuration,
+                  curve: panelEase,
+                  child: IconTheme(
+                    data: IconThemeData(
+                      color: c.mutedForeground,
+                      size: _chevronSize,
+                    ),
+                    child: indicator ?? const PanelIcon(PanelIcons.chevronDown),
                   ),
-                  child: title,
                 ),
               ),
-              if (showIndicator)
-                ExcludeSemantics(
-                  child: AnimatedRotation(
-                    turns: open ? 0.5 : 0,
-                    duration: reduce ? Duration.zero : _disclosureDuration,
-                    curve: panelEase,
-                    child: IconTheme(
-                      data: IconThemeData(color: c.mutedForeground, size: 18),
-                      child:
-                          indicator ?? const PanelIcon(PanelIcons.chevronDown),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -636,7 +655,7 @@ class _DisclosureBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = PanelTheme.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(inset, 0, inset, 16),
+      padding: EdgeInsets.fromLTRB(inset, 0, inset, _bodyPaddingBottom),
       child: DefaultTextStyle(
         style: theme.typography.style(
           PanelTextSize.sm,

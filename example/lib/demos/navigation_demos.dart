@@ -109,6 +109,21 @@ class _PanelCard extends StatelessWidget {
   }
 }
 
+/// A line of muted text under a row of tabs, 16pt clear above and below.
+class _TabNote extends StatelessWidget {
+  const _TabNote(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: PanelText(text, size: PanelTextSize.sm, muted: true),
+    );
+  }
+}
+
 /// Initials in a circle, standing in for an avatar.
 class _Initials extends StatelessWidget {
   const _Initials(this.text);
@@ -236,21 +251,15 @@ class _TabsDemo extends StatelessWidget {
                 ),
                 PanelTabsContent(
                   value: 'overview',
-                  child: PanelText(
+                  child: _TabNote(
                     'A rule under the active tab, on a row that has no track '
                     'of its own: for a page-level switch rather than a '
                     'control.',
-                    size: PanelTextSize.sm,
-                    muted: true,
                   ),
                 ),
                 PanelTabsContent(
                   value: 'activity',
-                  child: PanelText(
-                    'Four things happened while you were away.',
-                    size: PanelTextSize.sm,
-                    muted: true,
-                  ),
+                  child: _TabNote('Four things happened while you were away.'),
                 ),
               ],
             ),
@@ -272,28 +281,18 @@ class _TabsDemo extends StatelessWidget {
                 ),
                 PanelTabsContent(
                   value: 'all',
-                  child: PanelText(
+                  child: _TabNote(
                     'A filled chip on the page, with the active label '
                     'inverted against it.',
-                    size: PanelTextSize.sm,
-                    muted: true,
                   ),
                 ),
                 PanelTabsContent(
                   value: 'unread',
-                  child: PanelText(
-                    'Nothing unread.',
-                    size: PanelTextSize.sm,
-                    muted: true,
-                  ),
+                  child: _TabNote('Nothing unread.'),
                 ),
                 PanelTabsContent(
                   value: 'flagged',
-                  child: PanelText(
-                    'Nothing flagged.',
-                    size: PanelTextSize.sm,
-                    muted: true,
-                  ),
+                  child: _TabNote('Nothing flagged.'),
                 ),
               ],
             ),
@@ -342,7 +341,7 @@ class _CustomTabs extends StatelessWidget {
                 for (final name in ['Open', 'Merged', 'Closed'])
                   PanelTabsTrigger(
                     value: name.toLowerCase(),
-                    activeLabelColor: c.successForeground,
+                    activeLabelColor: c.success,
                     child: Text(name),
                   ),
               ],
@@ -450,11 +449,7 @@ class _ScrollableTabsDemo extends StatelessWidget {
                 for (final section in _sections)
                   PanelTabsContent(
                     value: section,
-                    child: PanelText(
-                      '$section settings for the workspace.',
-                      size: PanelTextSize.sm,
-                      muted: true,
-                    ),
+                    child: _TabNote('$section settings for the workspace.'),
                   ),
               ],
             ),
@@ -468,6 +463,7 @@ class _ScrollableTabsDemo extends StatelessWidget {
               initialValue: 'mon',
               children: [
                 PanelTabsList(
+                  scrollable: true,
                   children: [
                     for (final (value, label, _) in _days)
                       PanelTabsTrigger(value: value, child: Text(label)),
@@ -1311,19 +1307,15 @@ class _ItemDemo extends StatelessWidget {
             ),
           ],
         ),
-        DemoGroup(
-          label: 'With a control',
-          children: [_SwitchItem(onChanged: (_) {})],
-        ),
+        const DemoGroup(label: 'With a control', children: [_SwitchItem()]),
       ],
     );
   }
 }
 
+/// A settings row whose switch the whole row toggles.
 class _SwitchItem extends StatefulWidget {
-  const _SwitchItem({required this.onChanged});
-
-  final ValueChanged<bool> onChanged;
+  const _SwitchItem();
 
   @override
   State<_SwitchItem> createState() => _SwitchItemState();
@@ -1332,10 +1324,7 @@ class _SwitchItem extends StatefulWidget {
 class _SwitchItemState extends State<_SwitchItem> {
   bool _on = true;
 
-  void _set(bool value) {
-    setState(() => _on = value);
-    widget.onChanged(value);
-  }
+  void _set(bool value) => setState(() => _on = value);
 
   @override
   Widget build(BuildContext context) {
