@@ -4,8 +4,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/panel_motion.dart';
+import 'panel_focus_ring.dart';
 import 'panel_hit_slop.dart';
-import '../theme/panel_theme.dart';
 
 /// The interaction state a [PanelPressable] hands to its builder.
 @immutable
@@ -73,7 +73,9 @@ class PanelPressable extends StatefulWidget {
     this.semanticRole,
     this.hitSlop,
     this.focusRingRadius,
+    this.focusRingStyle = PanelFocusRingStyle.soft,
     this.focusRingColor,
+    this.link,
     this.behavior = HitTestBehavior.opaque,
   }) : assert(child != null || builder != null, 'Pass a child or a builder.');
 
@@ -151,8 +153,15 @@ class PanelPressable extends StatefulWidget {
   /// The shape of the keyboard focus ring. Null draws no ring.
   final BorderRadius? focusRingRadius;
 
-  /// The ring colour. Defaults to the theme's `ring` token at 40%.
+  /// How the focus ring is drawn: the web button's soft 3pt ring by default.
+  final PanelFocusRingStyle focusRingStyle;
+
+  /// The ring's colour, used as given. Defaults to the `ring` token at the
+  /// style's opacity.
   final Color? focusRingColor;
+
+  /// Whether screen readers announce this as a link.
+  final bool? link;
 
   /// How the gesture detector hit-tests.
   final HitTestBehavior behavior;
@@ -170,6 +179,20 @@ class _PanelPressableState extends State<PanelPressable>
   bool _hovered = false;
   bool _focused = false;
 
+  // Whether the platform is showing focus highlights (keyboard use) and this
+  // control could take focus. The ring shows only while the control itself
+  // holds focus, not while a control inside it does.
+  bool _highlightMode = false;
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode =>
+      widget.focusNode ??
+      (_ownFocusNode ??= FocusNode(debugLabel: 'PanelPressable'));
+
+  // A pressable inside this one that is being pressed. As in React Native,
+  // only the innermost control responds to a press; this one stays still.
+  int _innerPresses = 0;
+  _PanelPressableState? _outer;
+
   bool get _enabled =>
       widget.enabled &&
       (widget.onPressed != null || widget.onLongPress != null);
@@ -179,8 +202,19 @@ class _PanelPressableState extends State<PanelPressable>
       (widget.pressScale != 1 || widget.pressOpacity != 1);
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_syncFocus);
+  }
+
+  @override
   void didUpdateWidget(PanelPressable oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      (oldWidget.focusNode ?? _ownFocusNode)?.removeListener(_syncFocus);
+      _focusNode.addListener(_syncFocus);
+      _syncFocus();
+    }
     if (!_enabled && (_pressed || _hovered)) {
       _pressed = false;
       _hovered = false;
@@ -190,11 +224,28 @@ class _PanelPressableState extends State<PanelPressable>
 
   @override
   void dispose() {
+    _focusNode.removeListener(_syncFocus);
+    _ownFocusNode?.dispose();
+    _outer?._innerPressChanged(down: false);
     _press.dispose();
     super.dispose();
   }
 
+  void _syncFocus() {
+    final focused = _highlightMode && _focusNode.hasPrimaryFocus;
+    if (focused != _focused && mounted) setState(() => _focused = focused);
+  }
+
+  void _innerPressChanged({required bool down}) {
+    _innerPresses += down ? 1 : -1;
+    // The inner control won the press after this one had started to show it.
+    if (down && _pressed) _settle();
+  }
+
   void _handleDown(TapDownDetails details) {
+    _outer = context.getInheritedWidgetOfExactType<_PressScope>()?.owner;
+    _outer?._innerPressChanged(down: true);
+    if (_innerPresses > 0) return;
     setState(() => _pressed = true);
     if (_animates) {
       _press.animateTo(1, duration: PanelDurations.pressIn, curve: panelEase);
@@ -202,13 +253,19 @@ class _PanelPressableState extends State<PanelPressable>
   }
 
   void _handleUp() {
-    if (!mounted) return;
+    _outer?._innerPressChanged(down: false);
+    _outer = null;
+    _settle();
+  }
+
+  void _settle() {
+    if (!mounted || !_pressed) return;
     // A pressable disabled mid-press (a stepper reaching its bound) has its
     // tap cancelled while the tree rebuilds; settle the state after the frame
     // rather than marking it dirty in the middle of a build.
     if (SchedulerBinding.instance.schedulerPhase ==
         SchedulerPhase.persistentCallbacks) {
-      SchedulerBinding.instance.addPostFrameCallback((_) => _handleUp());
+      SchedulerBinding.instance.addPostFrameCallback((_) => _settle());
       return;
     }
     setState(() => _pressed = false);
@@ -263,20 +320,12 @@ class _PanelPressableState extends State<PanelPressable>
     );
 
     final ringRadius = widget.focusRingRadius;
-    if (ringRadius != null && _focused) {
-      final ring =
-          widget.focusRingColor ??
-          PanelTheme.of(context).colors.ring.withValues(alpha: 0.4);
-      content = DecoratedBox(
-        position: DecorationPosition.foreground,
-        decoration: BoxDecoration(
-          borderRadius: ringRadius,
-          border: Border.all(
-            color: ring,
-            width: 3,
-            strokeAlign: BorderSide.strokeAlignOutside,
-          ),
-        ),
+    if (ringRadius != null) {
+      content = PanelFocusRing(
+        visible: _focused,
+        borderRadius: ringRadius,
+        style: widget.focusRingStyle,
+        color: widget.focusRingColor,
         child: content,
       );
     }
@@ -305,6 +354,7 @@ class _PanelPressableState extends State<PanelPressable>
         expanded: widget.expanded,
         value: widget.semanticValue,
         role: widget.semanticRole,
+        link: widget.link,
         label: widget.semanticLabel,
         hint: widget.semanticHint,
         onTap: enabled && widget.onPressed != null ? widget.onPressed : null,
@@ -313,13 +363,14 @@ class _PanelPressableState extends State<PanelPressable>
             : null,
         child: FocusableActionDetector(
           enabled: enabled,
-          focusNode: widget.focusNode,
+          focusNode: _focusNode,
           autofocus: widget.autofocus,
           mouseCursor:
               widget.mouseCursor ??
               (enabled ? SystemMouseCursors.click : MouseCursor.defer),
           onShowFocusHighlight: (value) {
-            if (_focused != value) setState(() => _focused = value);
+            _highlightMode = value;
+            _syncFocus();
           },
           onShowHoverHighlight: (value) {
             if (_hovered != value) setState(() => _hovered = value);
@@ -346,7 +397,7 @@ class _PanelPressableState extends State<PanelPressable>
             onTapCancel: enabled ? _handleUp : null,
             onTap: enabled ? widget.onPressed : null,
             onLongPress: enabled ? widget.onLongPress : null,
-            child: content,
+            child: _PressScope(owner: this, child: content),
           ),
         ),
       ),
@@ -358,4 +409,14 @@ class _PanelPressableState extends State<PanelPressable>
     if (slop == null || slop == EdgeInsets.zero) return child;
     return PanelHitSlop(slop: slop, child: child);
   }
+}
+
+/// Lets a pressable inside another one tell it about a press.
+class _PressScope extends InheritedWidget {
+  const _PressScope({required this.owner, required super.child});
+
+  final _PanelPressableState owner;
+
+  @override
+  bool updateShouldNotify(_PressScope oldWidget) => false;
 }

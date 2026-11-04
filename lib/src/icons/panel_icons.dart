@@ -49,6 +49,7 @@ abstract final class PanelIcons {
   /// PanelUI's `MenuIcon`.
   static const PanelIconData menu = PanelIconData(
     HugeIcons.strokeRoundedMenu01,
+    size: 20,
   );
 
   /// PanelUI's `XIcon`.
@@ -63,6 +64,7 @@ abstract final class PanelIcons {
   static const PanelIconData arrowUpRight = PanelIconData(
     HugeIcons.strokeRoundedArrowUpRight01,
     mirrorInRtl: true,
+    size: 20,
   );
 
   /// PanelUI's `PlusIcon`.
@@ -74,12 +76,14 @@ abstract final class PanelIcons {
   static const PanelIconData minus = PanelIconData(
     HugeIcons.strokeRoundedMinusSign,
     strokeWidth: 3,
+    size: 14,
   );
 
   /// PanelUI's `CheckIcon`.
   static const PanelIconData check = PanelIconData(
     HugeIcons.strokeRoundedTick02,
     strokeWidth: 3,
+    size: 14,
   );
 
   /// PanelUI's `CircleIcon`.
@@ -102,16 +106,19 @@ abstract final class PanelIcons {
   /// PanelUI's `InfoIcon`.
   static const PanelIconData info = PanelIconData(
     HugeIcons.strokeRoundedInformationCircle,
+    size: 20,
   );
 
   /// PanelUI's `CheckCircleIcon`.
   static const PanelIconData checkCircle = PanelIconData(
     HugeIcons.strokeRoundedCheckmarkCircle01,
+    size: 20,
   );
 
   /// PanelUI's `AlertTriangleIcon`.
   static const PanelIconData alertTriangle = PanelIconData(
     HugeIcons.strokeRoundedAlert02,
+    size: 20,
   );
 
   /// PanelUI's `ShieldAlertIcon`.
@@ -362,6 +369,7 @@ abstract final class PanelIcons {
     HugeIcons.strokeRoundedStar,
     strokeWidth: 1.6,
     fillable: true,
+    size: 20,
   );
 
   /// PanelUI's `HeartIcon`.
@@ -436,10 +444,16 @@ abstract final class PanelIcons {
   );
 
   /// PanelUI's `SunIcon`.
-  static const PanelIconData sun = PanelIconData(HugeIcons.strokeRoundedSun03);
+  static const PanelIconData sun = PanelIconData(
+    HugeIcons.strokeRoundedSun03,
+    size: 18,
+  );
 
   /// PanelUI's `MoonIcon`.
-  static const PanelIconData moon = PanelIconData(HugeIcons.strokeRoundedMoon);
+  static const PanelIconData moon = PanelIconData(
+    HugeIcons.strokeRoundedMoon,
+    size: 18,
+  );
 
   /// PanelUI's `ArrowUpIcon`.
   static const PanelIconData arrowUp = PanelIconData(

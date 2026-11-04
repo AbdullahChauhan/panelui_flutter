@@ -141,10 +141,48 @@ abstract final class PanelDurations {
 
   /// A checkbox or radio emptying.
   static const Duration uncheck = Duration(milliseconds: 120);
+
+  /// A hover or focus change on a pointer device: Tailwind's `duration-150`,
+  /// run on [PanelCurves.standard].
+  static const Duration hover = Duration(milliseconds: 150);
+}
+
+/// The curves PanelUI's motion uses.
+abstract final class PanelCurves {
+  /// Reanimated's default `withTiming` easing, `Easing.inOut(Easing.quad)`,
+  /// computed exactly (2t² then 1 − 2(1 − t)²) rather than approximated by a
+  /// cubic, which drifts by up to 2% mid-way.
+  static const Curve inOutQuad = _InOutQuad();
+
+  /// Reanimated's `Easing.inOut(Easing.ease)`: an ease-in run forwards over
+  /// the first half and mirrored over the second. PanelUI's spinner pulse and
+  /// indeterminate progress sweep run on it.
+  static const Curve inOutEase = _InOutEase();
+
+  /// Tailwind's default transition timing, `cubic-bezier(0.4, 0, 0.2, 1)`,
+  /// which PanelUI's web package uses for hover and focus changes.
+  static const Curve standard = Cubic(0.4, 0, 0.2, 1);
+}
+
+class _InOutQuad extends Curve {
+  const _InOutQuad();
+
+  @override
+  double transformInternal(double t) =>
+      t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+}
+
+class _InOutEase extends Curve {
+  const _InOutEase();
+
+  @override
+  double transformInternal(double t) => t < 0.5
+      ? Curves.easeIn.transform(t * 2) / 2
+      : 1 - Curves.easeIn.transform((1 - t) * 2) / 2;
 }
 
 /// Reanimated's default `withTiming` easing, used for every timed animation.
-const Curve panelEase = Curves.easeInOutQuad;
+const Curve panelEase = PanelCurves.inOutQuad;
 
 /// Spring-driven animation on an [AnimationController].
 extension PanelAnimationControllerX on AnimationController {
@@ -153,12 +191,19 @@ extension PanelAnimationControllerX on AnimationController {
   ///
   /// Use an unbounded controller for a spring that overshoots; a bounded one
   /// clamps the overshoot away.
-  TickerFuture springTo(double target, SpringDescription spring) {
+  ///
+  /// [velocity] starts the spring at that speed instead, such as a released
+  /// drag's, in units of the controller's value per second.
+  TickerFuture springTo(
+    double target,
+    SpringDescription spring, {
+    double? velocity,
+  }) {
     final simulation = SpringSimulation(
       spring,
       value,
       target,
-      velocity,
+      velocity ?? this.velocity,
       tolerance: const Tolerance(distance: 0.0005, velocity: 0.005),
       snapToEnd: true,
     );

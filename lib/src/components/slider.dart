@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show RangeValues;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_hit_slop.dart';
 import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
@@ -946,7 +947,12 @@ class _ThumbFace extends StatelessWidget {
         ),
       ),
     );
-    return focused ? _withFocusRing(face, theme.colors, radius) : face;
+    return PanelFocusRing(
+      visible: focused,
+      borderRadius: radius,
+      style: PanelFocusRingStyle.offset,
+      child: face,
+    );
   }
 }
 
@@ -1064,25 +1070,4 @@ int _placesOf(double value) {
     places++;
   }
   return places;
-}
-
-/// Rings [child] the way the web package marks keyboard focus on a slider's
-/// handle (`ring-2 ring-ring ring-offset-2 ring-offset-background`): a 2pt
-/// band in the `ring` colour, held 2pt off the thumb by a band of the page
-/// background.
-Widget _withFocusRing(Widget child, PanelColors colors, BorderRadius radius) {
-  BoxDecoration band(Color color, double strokeAlign) => BoxDecoration(
-    borderRadius: radius,
-    border: Border.all(color: color, width: 2, strokeAlign: strokeAlign),
-  );
-  return DecoratedBox(
-    position: DecorationPosition.foreground,
-    // A stroke aligned at 3 runs from 2pt to 4pt outside the edge.
-    decoration: band(colors.ring, 3),
-    child: DecoratedBox(
-      position: DecorationPosition.foreground,
-      decoration: band(colors.background, BorderSide.strokeAlignOutside),
-      child: child,
-    ),
-  );
 }

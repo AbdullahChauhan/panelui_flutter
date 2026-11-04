@@ -187,16 +187,12 @@ class PanelBreadcrumbLink extends StatelessWidget {
       isButton: false,
       semanticLabel: semanticLabel,
       focusRingRadius: BorderRadius.circular(theme.radii.sm),
-      // Announced as a link. PanelPressable has no parameter for that, so the
-      // flag merges into its node from here.
-      child: Semantics(
-        link: true,
-        child: IconTheme(
-          data: IconThemeData(color: color, size: _iconSize),
-          child: DefaultTextStyle(
-            style: _crumbStyle(theme, size, color: color),
-            child: child,
-          ),
+      link: true,
+      child: IconTheme(
+        data: IconThemeData(color: color, size: _iconSize),
+        child: DefaultTextStyle(
+          style: _crumbStyle(theme, size, color: color),
+          child: child,
         ),
       ),
     );

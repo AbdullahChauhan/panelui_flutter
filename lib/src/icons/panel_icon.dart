@@ -12,6 +12,7 @@ class PanelIconData {
     this.mirrorInRtl = false,
     this.strokeWidth = 2,
     this.fillable = false,
+    this.size = 16,
   });
 
   /// The glyph, in the format the `hugeicons` package publishes: a list of
@@ -28,6 +29,10 @@ class PanelIconData {
 
   /// Whether the glyph has a solid form (a star, a heart).
   final bool fillable;
+
+  /// PanelUI's default size for the glyph, used when neither the icon nor an
+  /// enclosing [IconTheme] sets one: 16 for most, 20 for the status glyphs.
+  final double size;
 }
 
 /// Draws a [PanelIconData].
@@ -63,7 +68,8 @@ class PanelIcon extends StatelessWidget {
   /// The glyph.
   final PanelIconData icon;
 
-  /// Size in logical pixels. Defaults to the [IconTheme] size.
+  /// Size in logical pixels. Defaults to the enclosing [IconTheme]'s size if
+  /// it sets one, then to the glyph's own [PanelIconData.size].
   final double? size;
 
   /// Colour. Defaults to the [IconTheme] colour.
@@ -83,7 +89,13 @@ class PanelIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final iconTheme = IconTheme.of(context);
-    final dimension = size ?? iconTheme.size ?? 16;
+    // IconTheme.of fills in Flutter's 24pt fallback; only a size an enclosing
+    // theme actually sets should beat the glyph's own.
+    final themedSize = context
+        .dependOnInheritedWidgetOfExactType<IconTheme>()
+        ?.data
+        .size;
+    final dimension = size ?? themedSize ?? icon.size;
     var paint = color ?? iconTheme.color ?? const Color(0xFF000000);
     final opacity = iconTheme.opacity ?? 1;
     if (opacity < 1) paint = paint.withValues(alpha: paint.a * opacity);

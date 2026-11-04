@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../foundation/panel_hit_slop.dart';
+import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
 import '../icons/panel_icon.dart';
 import '../icons/panel_icons.dart';
@@ -398,7 +399,12 @@ class _ChipPill extends StatelessWidget {
         ),
       ),
     );
-    return focused ? _withFocusRing(pill, theme.colors, radius) : pill;
+    return PanelFocusRing(
+      visible: focused,
+      borderRadius: radius,
+      style: PanelFocusRingStyle.offset,
+      child: pill,
+    );
   }
 }
 
@@ -419,7 +425,6 @@ class _ChipClose extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = PanelTheme.of(context).colors;
     final radius = BorderRadius.circular(metrics.close / 2);
     void remove() => onPressed?.call();
     return PanelHitSlop(
@@ -458,7 +463,12 @@ class _ChipClose extends StatelessWidget {
               ),
             );
             return state.focused
-                ? _withFocusRing(mark, colors, radius, offset: false)
+                ? PanelFocusRing(
+                    visible: true,
+                    borderRadius: radius,
+                    style: PanelFocusRingStyle.tight,
+                    child: mark,
+                  )
                 : mark;
           },
         ),
@@ -469,31 +479,3 @@ class _ChipClose extends StatelessWidget {
 
 Color _fade(Color color, double factor) =>
     color.withValues(alpha: color.a * factor);
-
-/// Rings [child] the way the web package marks keyboard focus on a chip: a
-/// 2pt band in the `ring` colour, held 2pt off the pill by a band of the page
-/// background (`ring-2 ring-ring ring-offset-2 ring-offset-background`). The
-/// ✕ is ringed against its edge, with no [offset] (`ring-2 ring-ring`).
-Widget _withFocusRing(
-  Widget child,
-  PanelColors colors,
-  BorderRadius radius, {
-  bool offset = true,
-}) {
-  BoxDecoration band(Color color, double strokeAlign) => BoxDecoration(
-    borderRadius: radius,
-    border: Border.all(color: color, width: 2, strokeAlign: strokeAlign),
-  );
-  final ring = DecoratedBox(
-    position: DecorationPosition.foreground,
-    // A 2pt stroke aligned at 3 runs from 2pt to 4pt outside the edge.
-    decoration: band(colors.ring, offset ? 3 : BorderSide.strokeAlignOutside),
-    child: child,
-  );
-  if (!offset) return ring;
-  return DecoratedBox(
-    position: DecorationPosition.foreground,
-    decoration: band(colors.background, BorderSide.strokeAlignOutside),
-    child: ring,
-  );
-}

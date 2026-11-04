@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
@@ -804,13 +803,6 @@ const Duration _scrollIntoViewDuration = Duration(milliseconds: 300);
 /// one easing on every platform keeps a hover and a selection alike.
 const Duration _labelColorDuration = Duration(milliseconds: 200);
 
-/// The underline hover plate's fade (`before:transition-colors`, Tailwind's
-/// default 150ms).
-const Duration _underlineHoverDuration = Duration(milliseconds: 150);
-
-/// Tailwind's default transition easing, `cubic-bezier(0.4, 0, 0.2, 1)`.
-const Curve _webEase = Curves.fastOutSlowIn;
-
 /// Where the underline hover plate sits inside its trigger (`inset-x-0.5
 /// inset-y-1.5`): inside the row and clear of the rule.
 const EdgeInsets _underlineHoverInset = EdgeInsets.symmetric(
@@ -908,22 +900,6 @@ TextStyle _labelStyle(PanelTypography type, PanelTabsSize size, Color color) {
 /// Springs [controller] to [target] from [velocity] rather than from the
 /// controller's own: a drag sets the strip's value directly, so it has none
 /// to carry, and a throw has to keep the finger's speed.
-TickerFuture _springFrom(
-  AnimationController controller,
-  double target,
-  double velocity,
-) {
-  return controller.animateWith(
-    SpringSimulation(
-      PanelSprings.strip,
-      controller.value,
-      target,
-      velocity,
-      tolerance: const Tolerance(distance: 0.0005, velocity: 0.005),
-      snapToEnd: true,
-    ),
-  );
-}
 
 class _TabsScope extends InheritedWidget {
   const _TabsScope({
@@ -1034,7 +1010,7 @@ class _TriggerContent extends StatelessWidget {
         duration: panelReduceMotion(context)
             ? Duration.zero
             : _labelColorDuration,
-        curve: _webEase,
+        curve: PanelCurves.standard,
         builder: (context, color, row) => DefaultTextStyle(
           style: _labelStyle(theme.typography, size, color!),
           textAlign: TextAlign.center,
@@ -1089,8 +1065,8 @@ class _HoverFill extends StatelessWidget {
               child: Padding(
                 padding: _underlineHoverInset,
                 child: AnimatedContainer(
-                  duration: reduce ? Duration.zero : _underlineHoverDuration,
-                  curve: _webEase,
+                  duration: reduce ? Duration.zero : PanelDurations.hover,
+                  curve: PanelCurves.standard,
                   decoration: BoxDecoration(
                     color: hovered
                         ? muted.withValues(
@@ -1108,7 +1084,7 @@ class _HoverFill extends StatelessWidget {
       case PanelTabsVariant.pill:
         return AnimatedContainer(
           duration: reduce ? Duration.zero : _labelColorDuration,
-          curve: _webEase,
+          curve: PanelCurves.standard,
           decoration: BoxDecoration(
             color: hovered && !active ? muted : clear,
             borderRadius: shape,
@@ -1833,7 +1809,7 @@ class _TabsPagerState extends State<_TabsPager>
     if (_still) {
       _position.value = target;
     } else {
-      _springFrom(_position, target, speed);
+      _position.springTo(target, PanelSprings.strip, velocity: speed);
     }
     final index = target.round();
     if (index != from.round()) {

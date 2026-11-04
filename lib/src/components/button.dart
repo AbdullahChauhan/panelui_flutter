@@ -2,7 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../foundation/panel_focus_ring.dart';
 import '../foundation/panel_pressable.dart';
+import '../theme/panel_motion.dart';
 import '../theme/panel_theme.dart';
 import '../theme/panel_theme_data.dart';
 import '../theme/panel_tokens.dart';
@@ -415,17 +417,6 @@ const double _glyphSize = 16;
 /// draws its glyph at `size-5`.
 const double _iconSquareGlyphSize = 20;
 
-/// How long a hover takes to cross to its colours: the web button's
-/// `transition-[background-color,color,…] duration-150`.
-const Duration _hoverDuration = Duration(milliseconds: 150);
-
-/// Tailwind's default transition easing, `cubic-bezier(0.4, 0, 0.2, 1)`.
-const Curve _hoverCurve = Curves.fastOutSlowIn;
-
-/// The web button's `focus-visible:ring-[3px]`, which PanelPressable also
-/// draws outside a standalone button.
-const double _focusRingWidth = 3;
-
 /// The width of the group's border (`Border.all`'s default) and of the
 /// dividers between its segments.
 const double _hairline = 1;
@@ -695,8 +686,8 @@ class _ButtonSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget surface = TweenAnimationBuilder<_ButtonInk>(
       tween: _ButtonInkTween(end: ink),
-      duration: _hoverDuration,
-      curve: _hoverCurve,
+      duration: PanelDurations.hover,
+      curve: PanelCurves.standard,
       child: Center(
         widthFactor: stretch ? null : 1,
         heightFactor: 1,
@@ -714,7 +705,10 @@ class _ButtonSurface extends StatelessWidget {
         foregroundDecoration: innerRing == null
             ? null
             : BoxDecoration(
-                border: Border.all(color: innerRing!, width: _focusRingWidth),
+                border: Border.all(
+                  color: innerRing!,
+                  width: PanelFocusRingStyle.soft.width,
+                ),
               ),
         child: IconTheme(
           data: IconThemeData(color: ink.content, size: iconSize),

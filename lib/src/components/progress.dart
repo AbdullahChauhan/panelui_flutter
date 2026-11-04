@@ -345,18 +345,6 @@ Color _colorOf(PanelColors c, PanelProgressColor color) => switch (color) {
   PanelProgressColor.info => c.info,
 };
 
-/// Reanimated's `Easing.inOut(Easing.ease)`, which drives PanelUI's loop: the
-/// ease-in curve run forwards over the first half and mirrored over the
-/// second.
-class _InOutEase extends Curve {
-  const _InOutEase();
-
-  @override
-  double transformInternal(double t) => t < 0.5
-      ? Curves.easeIn.transform(t * 2) / 2
-      : 1 - Curves.easeIn.transform((1 - t) * 2) / 2;
-}
-
 /// Paints the track and the bar on it, repainting as [fill] or [loop] ticks
 /// without rebuilding anything.
 class _ProgressPainter extends CustomPainter {
@@ -378,7 +366,7 @@ class _ProgressPainter extends CustomPainter {
   final Color indicator;
   final bool rtl;
 
-  static const _ease = _InOutEase();
+  static const _ease = PanelCurves.inOutEase;
 
   @override
   void paint(Canvas canvas, Size size) {

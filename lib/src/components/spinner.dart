@@ -80,7 +80,7 @@ class _PanelSpinnerState extends State<PanelSpinner>
     with SingleTickerProviderStateMixin {
   late final AnimationController _progress = AnimationController(vsync: this);
   late final Animation<double> _pulse = _progress
-      .drive(CurveTween(curve: const _InOutEase()))
+      .drive(CurveTween(curve: PanelCurves.inOutEase))
       .drive(Tween(begin: 1.0, end: _pulseFloor));
   bool? _reduced;
 
@@ -129,17 +129,6 @@ class _PanelSpinnerState extends State<PanelSpinner>
       child: ring,
     );
   }
-}
-
-/// Reanimated's `Easing.inOut(Easing.ease)`: its ease-in curve, run forwards
-/// over the first half and mirrored over the second.
-class _InOutEase extends Curve {
-  const _InOutEase();
-
-  @override
-  double transformInternal(double t) => t < 0.5
-      ? Curves.easeIn.transform(t * 2) / 2
-      : 1 - Curves.easeIn.transform((1 - t) * 2) / 2;
 }
 
 /// The track and the arc. It repaints from [turn] without a rebuild.
